@@ -1,0 +1,49 @@
+'use strict';
+const $ = (s) => document.querySelector(s),
+  $$ = (s) => [...document.querySelectorAll(s)];
+const clamp = CORE.clamp,
+  lerp = (a, b, t) => a + (b - a) * t,
+  damp = (a, b, l, dt) => a + (b - a) * (1 - Math.exp(-l * dt));
+const D2R = Math.PI / 180,
+  R2D = 180 / Math.PI,
+  wrap180 = (a) => {
+    a %= 360;
+    if (a > 180) a -= 360;
+    if (a < -180) a += 360;
+    return a;
+  };
+const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
+const isMobile = isTouch && Math.min(screen.width, screen.height) < 900;
+const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+const DEF = {
+  sens: 1,
+  steer: 1,
+  invertPitch: false,
+  mode: 'auto',
+  fov: 88,
+  roll: 0.5,
+  bob: reduce ? 0.2 : 0.6,
+  shake: reduce ? 0.2 : 0.6,
+  hands: true,
+  quality: isMobile ? 'med' : 'high',
+  music: 0.7,
+  sfx: 0.8,
+  haptics: true,
+};
+const S = Object.assign({}, DEF);
+try {
+  Object.assign(S, JSON.parse(localStorage.getItem('fs_set') || '{}'));
+} catch (e) {}
+const saveS = () => {
+  try {
+    localStorage.setItem('fs_set', JSON.stringify(S));
+  } catch (e) {}
+};
+let best = 0;
+try {
+  best = +localStorage.getItem('fs_best') || 0;
+} catch (e) {}
+let hintCnt = {};
+try {
+  hintCnt = JSON.parse(localStorage.getItem('fs_hints') || '{}');
+} catch (e) {}
