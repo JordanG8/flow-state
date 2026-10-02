@@ -57,31 +57,28 @@ function run(p, motion, t0, t1, opts = {}) {
 const kf = (...pts) => pts; // readability
 
 // --- calibration -------------------------------------------------------------------------------------------
-function calibrate(p, lag = 0.25) {
+// The player follows an alternating LEFT/RIGHT (then UP/DOWN) beat. `lag` is how long after each prompt they start
+// moving (negative = they anticipate the metronome); `snappy` moves in 0.3 s instead of gliding for the whole beat.
+function calibrate(p, {lag = 0.25, snappy = false, ampT = 38, ampF = 22} = {}) {
   G.resetCal();
-  const beat = (axisName, signs, ampDeg) => {
+  const T0 = 1.4,
+    N = 6,
+    dur = snappy ? 0.3 : 0.9;
+  const beat = (axis, amp) => {
     G.calBegin();
-    // continuous alternating swing, each beat the phone goes from one extreme to the other
     const keys = [[0, 0]];
-    let cur = 0,
-      t = 0;
-    signs.forEach((s, i) => {
-      const tgt = s * ampDeg;
-      t += 1.0;
-      keys.push([i === 0 ? lag + 0.45 : t + lag, tgt]);
-      cur = tgt;
-    });
-    // beats are announced at t = 0,1,2.. ; the player reacts `lag` seconds later
-    const motion = [[p[axisName], keys]];
-    let curT = 0;
-    const fake = [];
-    signs.forEach((s, i) => G.calBeat(s, i * 1.0));
-    for (curT = 0; curT < signs.length + 0.05; curT += 1 / 60) G.feed(poseAt(p, motion, curT), curT);
-    return G.calSolve(signs.length);
+    let prev = 0;
+    for (let k = 0; k < N; k++) {
+      const tgt = (k % 2 === 0 ? 1 : -1) * amp;
+      keys.push([T0 + k + lag, prev], [T0 + k + lag + dur, tgt]);
+      prev = tgt;
+      G.calBeat(k % 2 === 0 ? 1 : -1, T0 + k);
+    }
+    const motion = [[axis, keys]];
+    for (let t = 0; t < T0 + N + 0.05; t += 1 / 60) G.feed(poseAt(p, motion, t), t);
+    return G.calSolve(T0 + N);
   };
-  const a = beat('t', [1, -1, 1, -1, 1, -1], 38);
-  const b = beat('f', [1, -1, 1, -1, 1, -1], 22);
-  return {a, b};
+  return {a: beat(p.t, ampT), b: beat(p.f, ampF)};
 }
 
 let fails = 0;
@@ -194,6 +191,47 @@ for (const p of [STAND, BED, BED2]) {
   });
 }
 
+console.log('\ncalibration is independent of reaction lag and movement style');
+for (const p of [STAND, BED, BED2])
+  for (const snappy of [false, true])
+    for (const lag of [-0.4, -0.2, 0, 0.25, 0.5, 0.75])
+      test(p.name + ' / ' + (snappy ? 'snappy' : 'smooth') + ' / lag ' + lag + 's', () => {
+        const {a, b} = calibrate(p, {lag, snappy});
+        assert(a.ok && b.ok, 'solve failed ' + JSON.stringify([a.reason, b.reason]));
+        const dt = ang(a.axis, p.t),
+          df = ang(b.axis, p.f);
+        assert(dt < 8, 'turn axis off by ' + dt.toFixed(1));
+        assert(df < 10, 'lift axis off by ' + df.toFixed(1));
+        assert(a.axis[0] * p.t[0] + a.axis[1] * p.t[1] + a.axis[2] * p.t[2] > 0, 'turn sign flipped');
+        assert(b.axis[0] * p.f[0] + b.axis[1] * p.f[1] + b.axis[2] * p.f[2] > 0, 'lift sign flipped');
+        assert(a.amp > 22 && a.amp < 50, 'amp ' + a.amp.toFixed(1) + ' (true 38)');
+      });
+
+console.log('\ncalibration when recording starts mid-return from the previous step');
+for (const p of [STAND, BED, BED2])
+  test(p.name + ': flick step beginning at -38 deg on the twist axis', () => {
+    G.resetCal();
+    const T0 = 1.4,
+      N = 6;
+    G.calBegin();
+    const fk = [[0, 0]],
+      tk = [[-1, -38], [1.0, 0]]; // still swinging back from step 1's last extreme
+    let prev = 0;
+    for (let k = 0; k < N; k++) {
+      const tgt = (k % 2 === 0 ? 1 : -1) * 22;
+      fk.push([T0 + k + 0.2, prev], [T0 + k + 0.2 + 0.7, tgt]);
+      prev = tgt;
+      G.calBeat(k % 2 === 0 ? 1 : -1, T0 + k);
+    }
+    const motion = [[p.t, tk], [p.f, fk]];
+    for (let t = 0; t < T0 + N + 0.05; t += 1 / 60) G.feed(poseAt(p, motion, t), t);
+    const r = G.calSolve(T0 + N);
+    assert(r.ok, JSON.stringify(r));
+    const df = ang(r.axis, p.f);
+    assert(df < 6, 'flick axis off by ' + df.toFixed(1));
+    assert(r.axis[0] * p.f[0] + r.axis[1] * p.f[1] + r.axis[2] * p.f[2] > 0, 'sign flipped');
+  });
+
 console.log('\ncalibration quality gates');
 test('refuses a calibration where the player barely moved', () => {
   G.resetCal();
@@ -208,7 +246,7 @@ test('refuses random thrashing', () => {
   G.calBegin();
   for (let i = 0; i < 6; i++) G.calBeat(i % 2 ? -1 : 1, i);
   for (let t = 0; t < 6; t += 1 / 60) {
-    const q = G.qmul(G.qmul(G.qaxis([1, 0, 0], Math.sin(t * 7) * 0.8), G.qaxis([0, 1, 0], Math.cos(t * 5.3) * 0.8)), G.qaxis([0, 0, 1], Math.sin(t * 3.1) * 0.8));
+    const q = G.qmul(G.qmul(G.qaxis([1, 0, 0], Math.sin(t * 7) * 0.8), G.qaxis([0, 1, 0], Math.cos(t * 5.3) * 0.8)), G.qaxis([0, 0, 1], Math.sin(t * 11.3) * 0.8));
     G.feed(q, t);
   }
   const r = G.calSolve(6);

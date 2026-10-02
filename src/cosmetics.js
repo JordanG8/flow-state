@@ -106,11 +106,11 @@ const Cos = (() => {
     U.uBody.value.set(b ? b[0] : 0, b ? b[1] : 0, b ? b[2] : 0, b ? 1 : 0);
     U.uTrim.value.set(t ? t[0] : 0, t ? t[1] : 0, t ? t[2] : 0, t ? 1 : 0);
   }
-  // colour used for trails: the outfit's trim, or the act accent for the default
+  // colour used for trails: the outfit's body colour, or the act accent for the default
   const trailCol = new THREE.Color();
   function trailColor() {
-    const t = U.uTrim.value;
-    if (t.w > 0.5) return trailCol.setRGB(t.x, t.y, t.z);
+    const b = U.uBody.value;
+    if (b.w > 0.5) return trailCol.setRGB(b.x, b.y, b.z);
     return trailCol.copy(U.uAccent.value);
   }
 
@@ -203,7 +203,7 @@ const Cos = (() => {
       sn = clamp(P.speed / 24, 0, 1),
       ph = P.stride * Math.PI * 2,
       gr = P.grounded && !P.sliding ? 1 : 0;
-    w.run = damp(w.run, gr * sn, 8, raw);
+    w.run = damp(w.run, gr, 9, raw);
     w.air = damp(w.air, P.grounded ? 0 : 1, 12, raw);
     w.slide = damp(w.slide, P.sliding ? 1 : 0, 14, raw);
     r.root.position.set(P.x, P.y, P.z);
@@ -211,14 +211,14 @@ const Cos = (() => {
     r.root.rotation.set(0, visH * D2R - lean * 0.28, 0, 'YXZ');
     r.root.rotation.z = -lean * 0.12;
     const s = Math.sin(ph),
-      sw = w.run * 0.95;
+      sw = w.run * (0.5 + 0.5 * sn);
     r.legL.rotation.x = s * sw - 0.85 * w.air + w.slide * 1.1;
     r.legR.rotation.x = -s * sw - 0.2 * w.air + w.slide * 1.2;
     r.armL.rotation.x = -s * sw * 0.9 + 1.2 * w.air - w.slide * 0.3;
     r.armR.rotation.x = s * sw * 0.9 + 1.5 * w.air - w.slide * 0.3;
     r.armL.rotation.z = -0.08 - 0.5 * w.air;
     r.armR.rotation.z = 0.08 + 0.5 * w.air;
-    r.pelvis.rotation.x = -0.2 * sn * w.run + 1.15 * w.slide - 0.1 * w.air;
+    r.pelvis.rotation.x = -0.05 * w.run - 0.17 * sn * w.run + 1.15 * w.slide - 0.1 * w.air;
     r.pelvis.position.y = 0.9 - 0.2 * w.run * (0.6 + 0.4 * Math.abs(Math.cos(ph))) - 0.5 * w.slide - 0.08 * w.air;
     r.neck.rotation.x = -r.pelvis.rotation.x * 0.7;
     if (r.ant) r.ant.position.x = 0.06 + Math.sin(now * 9) * 0.015 * (0.3 + sn);
@@ -284,15 +284,20 @@ const Cos = (() => {
         if (T.pts.length > NR) T.pts.pop();
       }
       T.pts[0] = [P.x, P.y + 0.95, P.z];
+      // Only the last ~3.4 m: long enough to read as a trail, short enough that it never reaches the chase camera.
       const pa = rib.geometry.attributes.position.array,
-        n = T.pts.length;
+        n = T.pts.length,
+        LMAX = 3.4;
+      let run = 0;
       for (let i = 0; i < NR; i++) {
-        const p = T.pts[Math.min(i, n - 1)],
-          q = T.pts[Math.min(i + 1, n - 1)],
+        const j = Math.min(i, n - 1),
+          p = T.pts[j],
+          q = T.pts[Math.min(j + 1, n - 1)],
           tx = p[0] - q[0],
           tz = p[2] - q[2],
-          l = Math.hypot(tx, tz) || 1,
-          wd = 0.17 * (1 - i / NR) * clamp(P.speed / 14, 0.2, 1),
+          l = Math.hypot(tx, tz) || 1;
+        if (i > 0 && i < n) run += Math.hypot(p[0] - T.pts[j - 1][0], p[2] - T.pts[j - 1][2]);
+        const wd = 0.16 * Math.max(0, 1 - run / LMAX) * clamp(P.speed / 14, 0.2, 1),
           sx = -tz / l,
           sz = tx / l;
         pa[i * 6] = p[0] + sx * wd;

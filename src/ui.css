@@ -249,7 +249,7 @@ input[type='range']:active::-moz-range-thumb {
   animation: rowin 0.28s var(--step) both;
 }
 .scr.on .pn-body > *,
-.scr.on .lk-grid > * {
+.scr.on .lk-grid.in > * {
   animation: rowin 0.3s var(--step) both;
   animation-delay: calc(var(--n, 0) * 22ms);
 }
@@ -716,7 +716,7 @@ body.fx * {
   .scr.on .stack > *,
   .scr.on .cal-t,
   .scr.on .pn-body > *,
-  .scr.on .lk-grid > * {
+  .scr.on .lk-grid.in > * {
     animation: none;
   }
   .seg button.on,
@@ -753,5 +753,61 @@ body.fx * {
   }
   .mn-kicker {
     margin-bottom: 4px;
+  }
+}
+
+/* touch screens have no real hover: do not leave controls displaced after a tap */
+@media (hover: none) {
+  .btn:hover,
+  .back:hover,
+  .lk-item:hover {
+    transform: none;
+    box-shadow: var(--shadow);
+  }
+  .btn.alt:hover {
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .btn:hover::after,
+  .back:hover::after {
+    opacity: 0;
+    transform: scale(0);
+  }
+  .row:hover {
+    background: none;
+    box-shadow: none;
+  }
+  .row:hover label {
+    transform: none;
+  }
+  .card:hover {
+    background: none;
+  }
+  .tg:hover {
+    box-shadow: none;
+  }
+  .mn-list button:hover {
+    color: var(--ink);
+    padding-left: 0;
+  }
+  .mn-list button:hover::before {
+    transform: translateX(-101%);
+  }
+  .mn-list button:hover::after {
+    opacity: 0;
+  }
+}
+@media (hover: none) {
+  /* the press itself still gets the full red slab */
+  .mn-list button:active {
+    color: #fff;
+    padding-left: 16px;
+  }
+  .mn-list button:active::before {
+    transform: none;
+  }
+  .mn-list button:active::after {
+    opacity: 1;
+    transform: translateX(0) rotate(45deg);
   }
 }

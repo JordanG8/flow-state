@@ -146,11 +146,7 @@ const Gyro = (() => {
       }
     st.speed =
       s0 && s0 !== h[h.length - 1] ? Math.hypot(a[0] - s0[1], a[1] - s0[2], a[2] - s0[3]) / Math.max(t - s0[0], 1e-3) : 0;
-    if (st.calS) {
-      const c = st.calS;
-      if (!c.q0) c.q0 = q;
-      c.trace.push([t, rotvec(qmul(qconj(c.q0), q))]);
-    }
+    if (st.calS) st.calS.trace.push([t, q]);
     if (!st.active) return;
     const thr = thresholds();
     // Resolve a flick in progress: wait for the wrist to come back, or to settle somewhere new.
@@ -234,30 +230,59 @@ const Gyro = (() => {
     const s = st.calS;
     st.calS = null;
     if (!s || !s.trace.length || s.beats.length < 2) return {ok: false, reason: 'nodata'};
-    const LAG = 0.12;
-    let m = [0, 0, 0];
-    const ds = [];
-    s.beats.forEach((b, i) => {
-      const a = traceAt(s.trace, b.t + LAG),
-        e = traceAt(s.trace, (s.beats[i + 1] ? s.beats[i + 1].t : endT) + LAG),
-        d = vsub(e, a);
-      ds.push(d);
-      m = vadd(m, vmul(d, b.sign));
-    });
-    const n = s.beats.length,
-      mag = (vlen(m) * R2D) / n;
-    if (mag < 14) return {ok: false, reason: 'small', mag: mag};
-    const axis = vnorm(m);
+    const B = s.beats,
+      n = B.length,
+      t0 = B[0].t;
+    // Measure everything relative to the resting pose just before the first beat, not the pose when recording began:
+    // the player may still be coming back from a previous step, and a big offset skews rotation vectors.
+    let qref = s.trace[0][1];
+    for (const x of s.trace) {
+      if (x[0] > t0 - 0.3) break;
+      qref = x[1];
+    }
+    const tr = s.trace.map((x) => [x[0], rotvec(qmul(qconj(qref), x[1]))]);
+    // Sign comes from the first move. The player is at rest until the first prompt, so the first real rotation
+    // after it can only be the instructed direction, whatever their reaction time.
+    const rest = traceAt(tr, t0 - 0.3);
+    let s0 = null;
+    for (const x of tr) {
+      if (x[0] < t0 - 0.3) continue;
+      if (x[0] > t0 + 1.3) break;
+      if (vlen(vsub(x[1], rest)) > 0.087) {
+        s0 = vsub(traceAt(tr, x[0] + 0.15), rest);
+        break;
+      }
+    }
+    if (!s0) return {ok: false, reason: 'small'};
+    // Axis and range come from whichever lag lines the beat windows up best with the player's actual rhythm.
+    let best = null;
+    for (let lag = -0.5; lag <= 0.801; lag += 0.05) {
+      let m = [0, 0, 0];
+      const ds = B.map((b, i) => {
+        const d = vsub(traceAt(tr, (B[i + 1] ? B[i + 1].t : endT) + lag), traceAt(tr, b.t + lag));
+        m = vadd(m, vmul(d, b.sign));
+        return d;
+      });
+      const mag = vlen(m);
+      if (!best || mag > best.mag) best = {mag: mag, m: m, ds: ds};
+    }
+    if ((best.mag * R2D) / n < 14) return {ok: false, reason: 'small', mag: (best.mag * R2D) / n};
+    let axis = vnorm(best.m);
+    if (dot(axis, s0) < 0) axis = vmul(axis, -1);
+    // Rhythm check: moves that follow the beat add up. Thrashing around does not.
+    let total = 0;
+    for (const d of best.ds) total += vlen(d);
+    if (best.mag / Math.max(total, 1e-9) < 0.62) return {ok: false, reason: 'messy', coherence: best.mag / total};
     let agree = 0;
     const mags = [];
-    s.beats.forEach((b, i) => {
-      const dm = vlen(ds[i]) * R2D;
+    best.ds.forEach((d, i) => {
+      const dm = vlen(d) * R2D;
       if (i > 0) mags.push(dm);
-      if (dm >= 10 && dot(vnorm(vmul(ds[i], b.sign)), axis) > 0.5) agree++;
+      if (dm >= 10 && Math.abs(dot(vnorm(d), axis)) > 0.5) agree++;
     });
     if (agree / n < 0.6) return {ok: false, reason: 'messy', agree: agree / n};
     mags.sort((x, y) => x - y);
-    const med = mags.length ? mags[mags.length >> 1] : mag * 2;
+    const med = mags.length ? mags[mags.length >> 1] : (best.mag * R2D) / n;
     return {ok: true, axis: axis, amp: clamp(med / 2, 10, 70), agree: agree / n};
   }
   // Build the full axis set from the two solved axes.

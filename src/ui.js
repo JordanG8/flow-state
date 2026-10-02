@@ -8,6 +8,7 @@ const UI = (() => {
 
   // ---- hover / press ------------------------------------------------------------------------------------
   document.addEventListener('mouseover', (e) => {
+    if (!fine) return; // touch emulates mouseover on tap; the press sound already covers it
     const t = e.target.closest && e.target.closest(SEL);
     if (!t || t.disabled || (e.relatedTarget && t.contains(e.relatedTarget))) return;
     if (!t.closest('.scr.on, #hud')) return;

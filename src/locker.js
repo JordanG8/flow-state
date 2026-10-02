@@ -32,12 +32,13 @@ const Locker = (() => {
         buzz(6);
         Cos.resetShown();
         renderTabs();
-        render();
+        render(true);
       };
       tabs.appendChild(b);
     }
   }
-  function render() {
+  function render(anim) {
+    grid.className = 'lk-grid' + (anim ? ' in' : '');
     grid.innerHTML = '';
     let total = 0,
       owned = 0;
@@ -79,7 +80,7 @@ const Locker = (() => {
   function open() {
     Cos.resetShown();
     renderTabs();
-    render();
+    render(true);
     game.lkAng = 0.5;
   }
   function close() {
