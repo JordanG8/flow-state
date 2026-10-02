@@ -507,6 +507,7 @@ const CORE = (() => {
   }
   function newPlayer(cp) {
     return {
+      sinceTurn: 9,
       x: cp.x,
       y: cp.y,
       z: cp.z,
@@ -570,6 +571,7 @@ const CORE = (() => {
     if (Math.abs(o) < 7.5) P.dashV = clamp(P.dashV - o * 6, -45, 45);
     P.lat = 0;
     P.turnLock = 0.34;
+    P.sinceTurn = 0;
     P.ev.push({t: 'turn', dir: c.dir, perfect: Math.abs(f - c.S / 2) < 2.6});
   }
   function stepP(C, P, dt) {
@@ -586,6 +588,7 @@ const CORE = (() => {
     P.coyote -= dt;
     P.dashCd -= dt;
     P.turnLock -= dt;
+    P.sinceTurn += dt;
     P.slideQ -= dt;
     P.stumbleT -= dt;
     if (P.turnBuf) {
@@ -660,7 +663,8 @@ const CORE = (() => {
     }
     P.ph = P.sliding ? SH : PH;
     P.speed += (P.speedT - P.speed) * (1 - Math.exp(-1.1 * dt));
-    const st = P.turnLock > 0 ? 0 : P.steer,
+    // After a turn the steer is normally locked out for a moment; aim assist drives it instead (P.assistOn).
+    const st = P.turnLock > 0 && !P.assistOn ? 0 : P.steer,
       kk = P.grounded ? 14 : 6;
     P.lat += (st * LATMAX - P.lat) * (1 - Math.exp(-kk * dt));
     P.dashV *= Math.exp(-6 * dt);
@@ -809,10 +813,65 @@ const CORE = (() => {
     P.q.length = 0;
     P.stumbleT = 0;
     P.turnLock = 0.2;
+    P.sinceTurn = 0;
     P.dist = cp.dist || 0;
     C.resetFrom(cp.ci);
   }
+  // The platform under the player `f` metres ahead: how far its centre is to the right (off, metres) and half its width.
+  function groundSpan(C, P, f) {
+    const h = hv(P.H),
+      hx = h[0],
+      hz = h[1],
+      rx = -hz,
+      rz = hx,
+      qx = P.x + hx * f,
+      qz = P.z + hz * f;
+    let best = null,
+      bd = 9;
+    for (let i = P.ci - 1; i <= P.ci + 2; i++) {
+      const ch = C.get(i);
+      if (!ch) continue;
+      for (const b of ch.boxes) {
+        if (b.k === 1 || qx < b.x0 || qx > b.x1 || qz < b.z0 || qz > b.z1) continue;
+        const dy = b.y1 - P.y;
+        if (dy > 1.3 || dy < -1.4) continue; // a floor you could be standing on (or about to land on), not a wall
+        if (Math.abs(dy) < bd) {
+          bd = Math.abs(dy);
+          best = b;
+        }
+      }
+    }
+    if (!best) return null;
+    const a = (best.x0 - P.x) * rx + (best.z0 - P.z) * rz,
+      b2 = (best.x1 - P.x) * rx + (best.z1 - P.z) * rz,
+      lo = Math.min(a, b2),
+      hi = Math.max(a, b2);
+    return {off: (lo + hi) / 2, half: (hi - lo) / 2};
+  }
+  // Aim assist for loose steering (gyro / touch). level 0..1.
+  //  - for 0.25 s after a turn (and after a respawn) it steers you onto the middle of the path no matter what the
+  //    input says, then hands control back over the next 0.25 s;
+  //  - the rest of the time it only pulls you toward the middle as you drift toward an edge.
+  function aimAssist(C, P, steer, level) {
+    P.assistOn = false;
+    if (level <= 0.01 || !P.alive) return steer;
+    const g = groundSpan(C, P, clamp(P.speed * 0.2, 2.5, 5));
+    if (!g) return steer;
+    const e = Math.abs(g.off) < 0.12 ? 0 : g.off,
+      toCentre = clamp(e * 0.65, -1, 1),
+      edge = clamp((Math.abs(g.off) / Math.max(g.half, 0.5) - 0.3) / 0.6, 0, 1),
+      full = Math.min(1, level * 1.5);
+    let w = level * 0.85 * edge;
+    if (P.sinceTurn < 0.25) w = Math.max(w, full);
+    else if (P.sinceTurn < 0.5) w = Math.max(w, full * (1 - (P.sinceTurn - 0.25) / 0.25));
+    if (Math.abs(P.dashV) > 4) w *= 0.3; // you meant that dash
+    if (w < 0.02) return steer;
+    P.assistOn = true;
+    return clamp(steer * (1 - w) + toCentre * w, -1, 1);
+  }
   return {
+    groundSpan: groundSpan,
+    aimAssist: aimAssist,
     Course: Course,
     newPlayer: newPlayer,
     stepP: stepP,
@@ -821,3 +880,5 @@ const CORE = (() => {
     clamp: clamp,
   };
 })();
+
+if (typeof module !== 'undefined') module.exports = CORE;
