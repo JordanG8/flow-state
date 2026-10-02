@@ -86,6 +86,7 @@ const CFG = [
   {sec: 'Audio'},
   {k: 'music', l: 'Music', min: 0, max: 1, st: 0.05, f: pct},
   {k: 'sfx', l: 'Effects', min: 0, max: 1, st: 0.05, f: pct},
+  {k: 'bass', l: 'Bass', h: 'Lower for laptop or phone speakers, higher for headphones', min: 0, max: 1, st: 0.05, f: pct},
   {k: 'haptics', l: 'Vibration', t: 'tg', only: 'touch'},
   {sec: 'Other'},
   {reset: 1},
@@ -94,7 +95,7 @@ const showCfg = (c) => !c.only || (c.only === 'touch' ? isTouch : !isMobile);
 
 // What a control does when it changes, beyond writing S[k].
 function applySetting(k) {
-  if (k === 'music' || k === 'sfx') A.setVol();
+  if (k === 'music' || k === 'sfx' || k === 'bass') A.setVol();
   else if (k === 'quality') resize();
   else if (k === 'view') game.applyView();
   else if (k === 'cursorFx' && !S.cursorFx) UI.hide();
