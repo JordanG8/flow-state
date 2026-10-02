@@ -1,9 +1,12 @@
-<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>FLOW STATE</title><meta name=viewport content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'><meta name=theme-color content=#ecebe6><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' rel=stylesheet><link rel=stylesheet href=style.css></head><body>
+<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>FLOW STATE</title><meta name=viewport content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'><meta name=theme-color content=#ecebe6><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' rel=stylesheet><link rel=stylesheet href=style.css><link rel=stylesheet href=ui.css></head><body>
 <canvas id=gl></canvas>
 <div id=fxr></div><div id=fxf></div>
 <div id=hud>
   <div id=hd><b id=hdn>000</b><i>M</i></div>
   <button id=hp aria-label=Pause><span></span><span></span></button>
+  <button id=hv aria-label='Switch camera' title='Camera (V)'><i></i></button>
+  <div id=xh class=xh aria-hidden=true><b class=xa></b><b class=xb></b><b class=xc></b><b class=xd></b><i></i></div>
+  <div id=toast><span id=toast-t></span></div>
   <div id=hhint><span id=hhs></span></div>
   <div id=hbig><span id=hbs></span></div>
   <div id=hflow><i id=hff></i></div>
@@ -25,6 +28,7 @@
     <h1 class='mn-title glitch'><span>Flow</span><span>State<i>.</i></span></h1>
     <nav class=mn-list>
       <button class=main data-a=play>Start run</button>
+      <button data-a=locker>Locker<em id=mn-new></em></button>
       <button data-a=how>How to move</button>
       <button data-a=settings>Settings</button>
     </nav>
@@ -35,30 +39,55 @@
   <div class=pn-head><h2>Settings</h2><button class=back data-a=back>Back</button></div>
   <div class=pn-body id=set-body></div>
 </section>
+<section id=locker class='scr locker'>
+  <div class=lk-left>
+    <div class=pn-head><h2>Locker</h2><button class=back data-a=back>Back</button></div>
+    <div class='seg lk-tabs' id=lk-tabs></div>
+    <p class='mono lk-note' id=lk-note></p>
+    <div class=lk-grid id=lk-grid></div>
+    <p class='mono lk-foot'><span id=lk-count></span><span>Unlock more by running further</span></p>
+  </div>
+  <div class='lk-hint mono'><span>Drag to turn the runner</span></div>
+</section>
 <section id=how class='scr panel'>
   <div class=pn-head><h2>How to move</h2><button class=back data-a=back>Back</button></div>
   <div class=pn-body>
-    <p class='mono how-p'>Hold the phone upright, like a window onto the course. Look around by turning it. You run on your own. Four rotations do everything. Slow rotation steers; fast rotation is a move.</p>
+    <p class='mono how-p'>Hold the phone however you like: standing, sitting, lying in bed. You run on your own. Four wrist moves do everything. Slow rotation steers; a fast flick is a move. Every flick resets itself, so you never have to turn around.</p>
     <div class=cards>
-      <div class=card><div class='ico turn'><i class=ph></i></div><h3>Turn</h3><p>Corners are painted red. Snap the phone about 90 degrees toward the bend. Snap early; it is buffered.</p></div>
-      <div class=card><div class='ico leap'><i class=ph></i></div><h3>Leap</h3><p>Flick the top of the phone up. Clears gaps, steps and red hurdles. Rings in the air build flow.</p></div>
+      <div class=card><div class='ico turn'><i class=ph></i></div><h3>Turn</h3><p>Corners are painted red. Snap your wrist toward the bend and let it spring back. Snap early; it is buffered.</p></div>
+      <div class=card><div class='ico leap'><i class=ph></i></div><h3>Leap</h3><p>Flick the top of the phone up and back. Clears gaps, steps and red hurdles. Rings in the air build flow.</p></div>
       <div class=card><div class='ico slide'><i class=ph></i></div><h3>Slide</h3><p>Flick down. Slides under red bars. In the air it dives you to the floor and into a slide.</p></div>
       <div class=card><div class='ico dash'><i class=ph></i></div><h3>Dash</h3><p>Tilt the phone sideways like a key in a lock. A short sideways burst for zig-zags.</p></div>
     </div>
-    <p class='mono how-p'>Red kills. White holds you. Time slows when you snap. Fly through rings in order and the music climbs the scale with you. Keyboard: A/D steer, Q/E turn, Space leap, S slide, Z/C dash. Touch: drag steers, swipe moves.</p>
+    <p class='mono how-p'>Red kills. White holds you. Time slows when you snap. Fly through rings in order and the music climbs the scale with you. Keyboard: A/D steer, Q/E turn, W or Space leap, S slide, Z/C dash, V camera. Mouse looks around, left click leaps, right click slides, Esc pauses. Touch: drag steers, swipe moves.</p>
   </div>
 </section>
 <section id=calib class=scr>
-  <h2 class=cal-t>Face<br>forward.</h2>
-  <p class=cal-p>Hold the phone upright and point it where you want to run. This becomes straight ahead. Recentre any time from Pause.</p>
-  <div class=stack><button class='btn rd' id=cal-go >Lock forward and run</button><button class='btn alt' data-a=menu>Cancel</button></div>
+  <div class='cal-head mono'><span id=cal-step>Calibrate</span><span id=cal-sub>Takes ten seconds</span></div>
+  <h2 class=cal-t id=cal-title>Spin<br>it.</h2>
+  <p class=cal-p id=cal-text>Hold the phone however you will play: couch, bed, standing. We learn how your wrist moves so you never have to stand up or turn around.</p>
+  <div class=cal-beat id=cal-beat><b id=cal-word>.</b><div class=cal-pips id=cal-pips></div></div>
+  <div class='lamps cal-lamps' id=cal-lamps><span data-g=turn1>Turn L</span><span data-g=turn-1>Turn R</span><span data-g=jump>Leap</span><span data-g=slide>Slide</span><span data-g=dash1>Dash R</span><span data-g=dash-1>Dash L</span></div>
+  <div class=stack><button class='btn rd' id=cal-go>Start</button><button class='btn alt' id=cal-redo>Recalibrate</button><button class='btn alt' id=cal-skip>Use defaults</button><button class='btn alt' id=cal-cancel>Cancel</button></div>
 </section>
 <section id=pause class=scr>
   <h2 class=cal-t>Paused.</h2>
-  <div class=stack><button class='btn rd' data-a=resume >Resume</button><button class='btn alt' data-a=restart>Restart run</button><button class='btn alt' data-a=settings>Settings</button><button class='btn alt' data-a=menu>Quit to menu</button></div>
+  <div class=stack><button class='btn rd' data-a=resume >Resume</button><button class='btn alt' data-a=restart>Restart run</button><button class='btn alt' data-a=settings>Settings</button><button class='btn alt' id=pz-recal data-a=recal>Recalibrate wrist</button><button class='btn alt' data-a=menu>Quit to menu</button></div>
+  <div class=quick id=pz-quick></div>
 </section>
+<canvas id=fxm></canvas>
 <div id=wipe></div>
 <script src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'></script>
+<script src='core.js'></script>
+<script src='gyro.js'></script>
+<script src='util.js'></script>
+<script src='audio.js'></script>
+<script src='input.js'></script>
+<script src='cosmetics.js'></script>
+<script src='ui.js'></script>
+<script src='calib.js'></script>
+<script src='settings.js'></script>
+<script src='locker.js'></script>
 <script src='game.js'></script>
 </body>
 </html>
