@@ -1,0 +1,64 @@
+<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>FLOW STATE</title><meta name=viewport content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'><meta name=theme-color content=#ecebe6><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' rel=stylesheet><link rel=stylesheet href=style.css></head><body>
+<canvas id=gl></canvas>
+<div id=fxr></div><div id=fxf></div>
+<div id=hud>
+  <div id=hd><b id=hdn>000</b><i>M</i></div>
+  <button id=hp aria-label=Pause><span></span><span></span></button>
+  <div id=hhint><span id=hhs></span></div>
+  <div id=hbig><span id=hbs></span></div>
+  <div id=hflow><i id=hff></i></div>
+</div>
+<section id=loader class='scr on'>
+  <i class='reg a'></i><i class='reg b'></i>
+  <header class='ld-top mono'><span>Flow/State</span><span class=hide-s>A parkour you steer by rotating</span><span>Build 0.9</span></header>
+  <div class=ld-mid>
+    <h1 class=ld-title aria-label='Flow State'><span class=ln id=t1></span><span class=ln id=t2></span></h1>
+    <div class=ld-bar><i id=ld-fill></i></div>
+    <div class=ld-row><span class=mono id=ld-step>Booting</span><span class=ld-pct><b id=ld-pct>0</b><small>%</small></span></div>
+  </div>
+  <footer class=ld-bot><span class=mono id=ld-tip></span><button id=ld-go>Loading</button></footer>
+</section>
+<section id=menu class=scr>
+  <div class='mn-top mono'><span>Flow/State</span><span id=mn-best>Best 0 m</span></div>
+  <div class=mn-main>
+    <p class='mn-kicker mono'>Rotate to move. Nothing else.</p>
+    <h1 class='mn-title glitch'><span>Flow</span><span>State<i>.</i></span></h1>
+    <nav class=mn-list>
+      <button class=main data-a=play>Start run</button>
+      <button data-a=how>How to move</button>
+      <button data-a=settings>Settings</button>
+    </nav>
+    <div class='mn-bot mono'><span id=mn-mode>Input: auto</span><span>Hold the phone upright</span></div>
+  </div>
+</section>
+<section id=settings class='scr panel'>
+  <div class=pn-head><h2>Settings</h2><button class=back data-a=back>Back</button></div>
+  <div class=pn-body id=set-body></div>
+</section>
+<section id=how class='scr panel'>
+  <div class=pn-head><h2>How to move</h2><button class=back data-a=back>Back</button></div>
+  <div class=pn-body>
+    <p class='mono how-p'>Hold the phone upright, like a window onto the course. Look around by turning it. You run on your own. Four rotations do everything. Slow rotation steers; fast rotation is a move.</p>
+    <div class=cards>
+      <div class=card><div class='ico turn'><i class=ph></i></div><h3>Turn</h3><p>Corners are painted red. Snap the phone about 90 degrees toward the bend. Snap early; it is buffered.</p></div>
+      <div class=card><div class='ico leap'><i class=ph></i></div><h3>Leap</h3><p>Flick the top of the phone up. Clears gaps, steps and red hurdles. Rings in the air build flow.</p></div>
+      <div class=card><div class='ico slide'><i class=ph></i></div><h3>Slide</h3><p>Flick down. Slides under red bars. In the air it dives you to the floor and into a slide.</p></div>
+      <div class=card><div class='ico dash'><i class=ph></i></div><h3>Dash</h3><p>Tilt the phone sideways like a key in a lock. A short sideways burst for zig-zags.</p></div>
+    </div>
+    <p class='mono how-p'>Red kills. White holds you. Time slows when you snap. Fly through rings in order and the music climbs the scale with you. Keyboard: A/D steer, Q/E turn, Space leap, S slide, Z/C dash. Touch: drag steers, swipe moves.</p>
+  </div>
+</section>
+<section id=calib class=scr>
+  <h2 class=cal-t>Face<br>forward.</h2>
+  <p class=cal-p>Hold the phone upright and point it where you want to run. This becomes straight ahead. Recentre any time from Pause.</p>
+  <div class=stack><button class='btn rd' id=cal-go >Lock forward and run</button><button class='btn alt' data-a=menu>Cancel</button></div>
+</section>
+<section id=pause class=scr>
+  <h2 class=cal-t>Paused.</h2>
+  <div class=stack><button class='btn rd' data-a=resume >Resume</button><button class='btn alt' data-a=restart>Restart run</button><button class='btn alt' data-a=settings>Settings</button><button class='btn alt' data-a=menu>Quit to menu</button></div>
+</section>
+<div id=wipe></div>
+<script src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'></script>
+<script src='game.js'></script>
+</body>
+</html>
