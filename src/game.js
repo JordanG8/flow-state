@@ -31,9 +31,11 @@ const U = {
   uAccent: {value: new THREE.Color(...PAL[0].a)},
   uInk: {value: new THREE.Color(0.06, 0.06, 0.08)},
   uFogDen: {value: 0.008},
+  uBody: {value: new THREE.Vector4(0, 0, 0, 0)}, // cosmetic outfit tint (w = 1 when custom)
+  uTrim: {value: new THREE.Vector4(0, 0, 0, 0)},
 };
 const VS = `attribute vec2 aSize;attribute vec3 aInfo;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; void main(){vec4 wp=modelMatrix*vec4(position,1.);vW=wp.xyz;vN=normalize(mat3(modelMatrix)*normal);vUv=uv;vSize=aSize;vInfo=aInfo;vec4 mv=viewMatrix*wp;vD=-mv.z;gl_Position=projectionMatrix*mv;}`;
-const FS = `precision highp float;uniform float uTime,uFogDen;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=.03+vD*.0007;float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} float lw=1.-smoothstep(edgeW,edgeW+fwidth(ed)*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade); float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);col+=(h21(gl_FragCoord.xy+fract(uTime)*91.)-.5)*.018;gl_FragColor=vec4(col,1.);}`;
+const FS = `precision highp float;uniform float uTime,uFogDen;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;uniform vec4 uBody,uTrim;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=.03+vD*.0007;float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} else if(kind>6.5&&kind<7.5){if(uBody.w>.5){col=uBody.rgb*lit;edgeC=mix(uInk,vec3(.93),step(dot(uBody.rgb,vec3(.33)),.22));}} else if(kind>7.5&&kind<8.5){if(uTrim.w>.5){col=uTrim.rgb*(.8+.2*lit);edgeC=mix(uInk,vec3(.93),step(dot(uTrim.rgb,vec3(.33)),.22));}else{float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);}} float lw=1.-smoothstep(edgeW,edgeW+fwidth(ed)*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade); float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);col+=(h21(gl_FragCoord.xy)-.5)*.006;gl_FragColor=vec4(col,1.);}`;
 const mainMat = new THREE.ShaderMaterial({
   uniforms: U,
   vertexShader: VS,
@@ -78,7 +80,7 @@ const postMat = new THREE.ShaderMaterial({
     uShat: {value: 0},
   },
   vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
-  fragmentShader: `precision highp float;uniform sampler2D tS;uniform vec2 uRes;uniform float uTime,uBlur,uChroma,uVig,uSlow,uFlash,uRed,uShat;varying vec2 vUv; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} vec2 h22(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);} void main(){vec2 uv=vUv;float asp=uRes.x/uRes.y;float crack=0.; if(uShat>.001){vec2 p=vec2(uv.x*asp,uv.y)*4.2;vec2 ip=floor(p),fp=fract(p);float d1=9.,d2=9.;vec2 id=vec2(0.);  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(float(i),float(j));vec2 o=h22(ip+g);vec2 pt=g+.5+.42*sin(6.2831*o+3.);float d=length(pt-fp);if(d<d1){d2=d1;d1=d;id=ip+g;}else if(d<d2){d2=d;}}  vec2 hd=h22(id)-.5;float s=uShat*uShat;uv+=vec2(hd.x/asp,hd.y)*s*.5+vec2(0.,-s*.35*h21(id));crack=1.-smoothstep(0.,.06,d2-d1);} vec2 d=uv-.5;float r=length(d);float bl=uBlur*smoothstep(.1,.8,r);float ca=uChroma*r*.012;vec3 c=vec3(0.); for(int i=0;i<4;i++){float t=float(i)/3.;vec2 u=uv-d*bl*t;c+=vec3(texture2D(tS,u-d*ca).r,texture2D(tS,u).g,texture2D(tS,u+d*ca).b);} c/=4.; c*=1.-uVig*smoothstep(.3,.95,r*1.2); float l=dot(c,vec3(.3,.59,.11));c=mix(c,vec3(l),uSlow*.4);c=mix(c,c*c*(3.-2.*c),.22); c=mix(c,vec3(1.,.1,.07),uRed*smoothstep(.25,.9,r)*.55); c=mix(c,vec3(.06),crack*clamp(uShat*6.,0.,1.));c=mix(c,vec3(1.),smoothstep(.75,1.,uShat)); c=mix(c,vec3(1.),uFlash);c+=(h21(gl_FragCoord.xy+fract(uTime)*57.)-.5)*.02;gl_FragColor=vec4(c,1.);}`,
+  fragmentShader: `precision highp float;uniform sampler2D tS;uniform vec2 uRes;uniform float uTime,uBlur,uChroma,uVig,uSlow,uFlash,uRed,uShat;varying vec2 vUv; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} vec2 h22(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);} void main(){vec2 uv=vUv;float asp=uRes.x/uRes.y;float crack=0.; if(uShat>.001){vec2 p=vec2(uv.x*asp,uv.y)*4.2;vec2 ip=floor(p),fp=fract(p);float d1=9.,d2=9.;vec2 id=vec2(0.);  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(float(i),float(j));vec2 o=h22(ip+g);vec2 pt=g+.5+.42*sin(6.2831*o+3.);float d=length(pt-fp);if(d<d1){d2=d1;d1=d;id=ip+g;}else if(d<d2){d2=d;}}  vec2 hd=h22(id)-.5;float s=uShat*uShat;uv+=vec2(hd.x/asp,hd.y)*s*.5+vec2(0.,-s*.35*h21(id));crack=1.-smoothstep(0.,.06,d2-d1);} vec2 d=uv-.5;float r=length(d);float bl=uBlur*smoothstep(.1,.8,r);float ca=uChroma*r*.012;vec3 c=vec3(0.); for(int i=0;i<4;i++){float t=float(i)/3.;vec2 u=uv-d*bl*t;c+=vec3(texture2D(tS,u-d*ca).r,texture2D(tS,u).g,texture2D(tS,u+d*ca).b);} c/=4.; c*=1.-uVig*smoothstep(.3,.95,r*1.2); float l=dot(c,vec3(.3,.59,.11));c=mix(c,vec3(l),uSlow*.4);c=mix(c,c*c*(3.-2.*c),.22); c=mix(c,vec3(1.,.1,.07),uRed*smoothstep(.25,.9,r)*.55); c=mix(c,vec3(.06),crack*clamp(uShat*6.,0.,1.));c=mix(c,vec3(1.),smoothstep(.75,1.,uShat)); c=mix(c,vec3(1.),uFlash);c+=(h21(gl_FragCoord.xy)-.5)*.006;gl_FragColor=vec4(c,1.);}`,
 });
 const postScene = new THREE.Scene(),
   postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -143,7 +145,7 @@ for (let i = 0; i < NS; i++)
     f: Math.random() * 70 - 8,
     len: 0.5 + Math.random() * 1.6,
   });
-function mkBox(w, h, d, kind, seed) {
+function mkBox(w, h, d, kind, seed, mat) {
   const g = new THREE.BoxGeometry(w, h, d),
     sz = new Float32Array(48),
     inf = new Float32Array(72),
@@ -165,7 +167,7 @@ function mkBox(w, h, d, kind, seed) {
     }
   g.setAttribute('aSize', new THREE.BufferAttribute(sz, 2));
   g.setAttribute('aInfo', new THREE.BufferAttribute(inf, 3));
-  return new THREE.Mesh(g, handMat);
+  return new THREE.Mesh(g, mat || handMat);
 }
 const hands = [];
 function mkHand(side) {
@@ -174,14 +176,14 @@ function mkHand(side) {
     m.position.set(x, y, z);
     g.add(m);
   };
-  add(mkBox(0.09, 0.085, 0.5, 0, 0.2), 0, 0, 0.25);
-  add(mkBox(0.1, 0.095, 0.05, 1, 0.5), 0, 0, 0.02);
-  add(mkBox(0.105, 0.05, 0.1, 1, 0.3), 0, 0, -0.06);
+  add(mkBox(0.09, 0.085, 0.5, 7, 0.2), 0, 0, 0.25);
+  add(mkBox(0.1, 0.095, 0.05, 8, 0.5), 0, 0, 0.02);
+  add(mkBox(0.105, 0.05, 0.1, 8, 0.3), 0, 0, -0.06);
   for (let i = 0; i < 4; i++) {
-    add(mkBox(0.022, 0.03, 0.075, 1, 0.1 * i), (i - 1.5) * 0.026, -0.004, -0.145);
-    add(mkBox(0.022, 0.04, 0.028, 1, 0.7), (i - 1.5) * 0.026, -0.027, -0.18);
+    add(mkBox(0.022, 0.03, 0.075, 8, 0.1 * i), (i - 1.5) * 0.026, -0.004, -0.145);
+    add(mkBox(0.022, 0.04, 0.028, 8, 0.7), (i - 1.5) * 0.026, -0.027, -0.18);
   }
-  const th = mkBox(0.026, 0.03, 0.065, 1, 0.4);
+  const th = mkBox(0.026, 0.03, 0.065, 8, 0.4);
   add(th, -side * 0.065, -0.005, -0.07);
   th.rotation.y = side * 0.5;
   vmScene.add(g);
@@ -201,6 +203,28 @@ function fitHands() {
   }
 }
 const hs = {jump: 0, slide: 0, dash: 0, turn: 0, run: 0};
+// Third-person runner (lives in the course scene) and the locker studio (its own scene, with a second runner).
+const runner = Cos.buildRunner();
+scene.add(runner.root);
+const studio = new THREE.Scene(),
+  studioRunner = Cos.buildRunner(),
+  studioSun = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sunMat);
+studioSun.scale.set(150, 150, 1);
+studioSun.frustumCulled = false;
+studio.add(studioSun);
+studio.add(studioRunner.root);
+studioRunner.root.visible = true;
+{
+  const slab = mkBox(6.4, 0.5, 6.4, 0, 0.2, mainMat);
+  slab.position.set(0, -0.25, 0);
+  studio.add(slab);
+  for (const [x, z, h] of [[-9, -14, 16], [8, -18, 22], [-20, -6, 11], [18, -4, 14]]) {
+    const t = mkBox(4 + (h % 3), h, 4 + (h % 4), 3, 0.5, mainMat);
+    t.position.set(x, h / 2 - 3.2, z);
+    studio.add(t);
+  }
+}
+const studioP = {x: 0, y: 0, z: 0, speed: 17, stride: 0, grounded: true, sliding: false, lat: 0, dashV: 0, a: 0};
 const FACES = (b) => {
   const {x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1} = b,
     sx = x1 - x0,
@@ -369,7 +393,7 @@ function buzz(p) {
       navigator.vibrate(p);
     } catch (e) {}
 }
-const SCRS = ['loader', 'menu', 'settings', 'how', 'calib', 'pause'];
+const SCRS = ['loader', 'menu', 'settings', 'how', 'calib', 'pause', 'locker'];
 function show(id) {
   for (const s of SCRS) {
     const e = $('#' + s);
@@ -412,12 +436,63 @@ const game = {
   cpRef: null,
   attract: null,
   slideSnd: false,
+  third: false,
+  cy: null, // smoothed floor height for the third-person camera
+  lkAng: 0.5,
+  lkKick: 0,
+  calibFrom: '',
+  calibPrev: '',
+  pendingUnlocks: [],
+  toggleView() {
+    S.view = S.view === 'third' ? 'first' : 'third';
+    saveS();
+    this.applyView();
+    UI.toast(S.view === 'third' ? 'Third person' : 'First person', 1200);
+    A.uiToggle(true);
+  },
+  applyView() {
+    document.body.dataset.view = S.view;
+    Cos.trailsClear();
+    this.cy = null;
+  },
+  // From the pause menu, settings, or the start of a run
+  openCalib(from) {
+    this.calibFrom = from;
+    this.calibPrev = this.state;
+    this.state = 'calib';
+    show('calib');
+    Calib.open({force: true, onDone: () => this.calibDone(true), onCancel: () => this.calibDone(false)});
+  },
+  calibDone(ok) {
+    const from = this.calibFrom;
+    this.calibFrom = '';
+    if (from === 'pause') {
+      if (ok) {
+        show(null);
+        this.state = 'playing';
+        In.recenter();
+        A.setTS(1, false);
+        In.lock();
+      } else {
+        this.state = 'paused';
+        show('pause');
+      }
+    } else {
+      this.state = this.calibPrev || 'settings';
+      show('settings');
+      buildSettings();
+    }
+  },
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
+    In.unlock();
+    buildPauseQuick();
+    $('#pz-recal').style.display = modeNow() === 'gyro' ? '' : 'none';
     show('pause');
     A.setTS(this.ts, true);
     A.slideStop();
+    A.wind(0, false);
   },
   resume() {
     if (this.state !== 'paused') return;
@@ -425,6 +500,7 @@ const game = {
     show(null);
     this.state = 'playing';
     In.recenter();
+    In.lock();
     A.setTS(1, false);
   },
 };
@@ -456,10 +532,9 @@ function newRun() {
   game.act = 0;
   game.visH = 0;
   game.ts = 1;
-  In.recenter();
-  In.simTurn = In.simTurnT = 0;
-  In.gq.length = 0;
-  In.hist.length = 0;
+  game.cy = null;
+  Cos.trailsClear();
+  In.reset();
 }
 function slowmo(d, k) {
   game.slowUntil = performance.now() / 1e3 + d;
@@ -479,15 +554,18 @@ function handleEvents(P) {
     } else if (e.t === 'jump') {
       A.jump();
       hs.jump = 1;
+      UI.xhHit('jump');
     } else if (e.t === 'slide') {
       A.slideStart();
       game.slideSnd = true;
       hs.slide = 1;
+      UI.xhHit('slide');
     } else if (e.t === 'dive') {
       A.jump();
     } else if (e.t === 'dash') {
       A.dash();
       hs.dash = e.dir;
+      UI.xhHit('dash');
       buzz(8);
     } else if (e.t === 'pad') {
       A.pad();
@@ -500,6 +578,7 @@ function handleEvents(P) {
       game.red = 1;
       hs.turn = e.dir;
       In.turnApplied(e.dir);
+      UI.xhHit('turn');
       game.flow = clamp(game.flow + (e.perfect ? 0.12 : 0.07), 0, 1);
       game.flowIdle = 0;
       buzz(e.perfect ? [14, 20, 14] : 14);
@@ -519,6 +598,7 @@ function handleEvents(P) {
         game.flow = clamp(game.flow + 0.07 + Math.min(0.05, game.combo * 0.004), 0, 1);
         game.flowIdle = 0;
         if (e.vis && !e.need) slowmo(0.12, 0.7);
+        UI.xhHit('hit');
         buzz(6);
       } else {
         game.combo = 0;
@@ -533,6 +613,7 @@ function die(why) {
   game.deadT = 0;
   A.death();
   A.slideStop();
+  A.wind(0, false);
   buzz([30, 40, 60]);
   bigText('Broken.');
   hintText('');
@@ -543,6 +624,7 @@ function die(why) {
       localStorage.setItem('fs_best', best);
     } catch (e) {}
   }
+  for (const u of Cos.newlyUnlocked()) game.pendingUnlocks.push(u.it.name);
 }
 function doRespawn() {
   const P = game.P;
@@ -550,10 +632,9 @@ function doRespawn() {
   game.flow = Math.max(0, game.flow * 0.3);
   game.combo = 0;
   game.ts = 1;
-  In.recenter();
-  In.simTurn = In.simTurnT = 0;
-  In.gq.length = 0;
-  In.hist.length = 0;
+  game.cy = null;
+  Cos.trailsClear();
+  In.reset();
   game.lockT = 0.7;
   game.visH = P.H * 90;
   game.state = 'playing';
@@ -561,6 +642,11 @@ function doRespawn() {
   A.rise();
   bigText('Again.');
   ensure();
+  if (game.pendingUnlocks.length) {
+    UI.toast('Unlocked: ' + game.pendingUnlocks.join(', '), 3200);
+    A.uiUnlock();
+    game.pendingUnlocks.length = 0;
+  }
 }
 function updateHints(P) {
   const c = game.course;
@@ -617,7 +703,6 @@ function stepGame(raw, now) {
     return false;
   })();
   In.update(raw, now, true, cn);
-  In.steerCalc();
   if (game.lockT > 0) {
     game.lockT -= raw;
     In.gq.length = 0;
@@ -632,6 +717,7 @@ function stepGame(raw, now) {
   if (game.state !== 'playing') return;
   if (game.slideSnd && !P.sliding) {
     A.slideStop();
+    A.wind(0, false);
     game.slideSnd = false;
   }
   const ch = c.get(P.ci);
@@ -687,8 +773,23 @@ function updateCamera(raw, now) {
     roll,
     fovK = 0;
   const att =
-    game.state === 'menu' || game.state === 'settings' || game.state === 'how' || game.state === 'loading';
-  if (att && game.attract) {
+      game.state === 'menu' || game.state === 'settings' || game.state === 'how' || game.state === 'loading',
+    lk = game.state === 'locker',
+    third = S.view === 'third' && !att && !lk;
+  game.third = third;
+  if (lk) {
+    // studio: fixed height, the camera orbits the runner (drag to turn)
+    px = Math.sin(game.lkAng) * 5.2;
+    pz = Math.cos(game.lkAng) * 5.2;
+    py = 2.25;
+    yaw = game.lkAng * R2D;
+    pitch = -13;
+    roll = 0;
+    const W = innerWidth,
+      H = innerHeight;
+    if (aspect > 1) camera.setViewOffset(W, H, -W * 0.2, 0, W, H);
+    else camera.setViewOffset(W, H, 0, H * 0.2, W, H);
+  } else if (att && game.attract) {
     const a = game.attract;
     a.s += raw * 9;
     if (a.s >= a.len - 30) {
@@ -717,7 +818,6 @@ function updateCamera(raw, now) {
     roll = Math.sin(now * 0.4) * 1.5;
     fovK = 0;
   } else {
-    const rel = wrap180(In.yaw - In.base);
     game.visH = damp(game.visH, P.H * 90, 10, raw);
     const sn = clamp(P.speed / 24, 0, 1),
       slide = P.sliding ? 1 : 0;
@@ -729,29 +829,52 @@ function updateCamera(raw, now) {
     const bob = Math.sin(ph) * 0.045 * bobA * sn;
     const sk = S.shake * (0.004 + 0.007 * sn) + game.shake * 0.07 * S.shake,
       sh = [Math.sin(now * 37) * sk, Math.sin(now * 29 + 1) * sk, Math.sin(now * 23 + 2) * sk];
-    px = P.x + sh[0];
-    py = P.y + game.eye + bob - game.dip + sh[1];
-    pz = P.z + sh[2];
-    yaw = P.H * 90 + (P.alive ? rel : rel);
-    pitch = clamp(In.pitch, -72, 78) + Math.cos(ph) * 0.35 * bobA * sn;
-    roll = In.roll * S.roll * 0.35 - (P.lat + P.dashV) * 0.35 * S.roll + Math.sin(ph) * 0.45 * bobA * sn;
-    fovK = sn * 6 + slide * 4 + game.flow * 4 + (P.grounded ? 0 : 2);
+    const V = In.view;
+    yaw = P.H * 90 + In.turnOff + V.yaw * (third ? 0.6 : 1);
+    if (!third) {
+      px = P.x + sh[0];
+      py = P.y + game.eye + bob - game.dip + sh[1];
+      pz = P.z + sh[2];
+      pitch = clamp(V.pitch, -72, 78) + Math.cos(ph) * 0.35 * bobA * sn;
+      roll = V.roll * S.roll * 0.35 - (P.lat + P.dashV) * 0.35 * S.roll + Math.sin(ph) * 0.45 * bobA * sn;
+      fovK = sn * 6 + slide * 4 + game.flow * 4 + (P.grounded ? 0 : 2);
+    } else {
+      // chase camera: orbits the runner, mouse / twist looks around
+      game.cy = game.cy == null ? P.y : damp(game.cy, P.y, 11, raw);
+      const dist = 4.9 + sn * 0.9 - slide * 0.5,
+        lp = clamp(-9 + V.pitch * 0.9, -55, 38),
+        yr = yaw * D2R,
+        pr = lp * D2R,
+        lx = -Math.sin(yr) * Math.cos(pr),
+        ly = Math.sin(pr),
+        lz = -Math.cos(yr) * Math.cos(pr),
+        ty = game.cy + 1.15 - slide * 0.4 - game.dip * 0.5;
+      px = P.x - lx * dist + Math.cos(yr) * 0.5 + sh[0];
+      py = Math.max(ty - ly * dist + sh[1], P.y + 0.45);
+      pz = P.z - lz * dist - Math.sin(yr) * 0.5 + sh[2];
+      pitch = lp;
+      roll = V.roll * S.roll * 0.25 - (P.lat + P.dashV) * 0.2 * S.roll;
+      fovK = sn * 4 + slide * 2 + game.flow * 3 - 6;
+    }
   }
   camera.position.set(px, py, pz);
   camera.rotation.set(pitch * D2R, yaw * D2R, roll * D2R, 'YXZ');
+  if (!lk && camera.view && camera.view.enabled) camera.clearViewOffset();
   camera.fov = baseVFov() + fovK;
   camera.updateProjectionMatrix();
   U.uCam.value.set(px, py, pz);
   sun.position.set(px + SUNDIR.x * 700, py + SUNDIR.y * 700 + 40, pz + SUNDIR.z * 700);
   sun.lookAt(camera.position);
-  const sn2 = att ? 0.3 : clamp((P.speed - 10) / 16, 0, 1);
+  studioSun.position.set(px + SUNDIR.x * 700, py + SUNDIR.y * 700 + 40, pz + SUNDIR.z * 700);
+  studioSun.lookAt(camera.position);
+  const sn2 = att || lk ? 0.3 : clamp((P.speed - 10) / 16, 0, 1);
   smat.opacity = clamp(sn2 - 0.25, 0, 1) * 0.2;
-  const vh = (att ? yaw : game.visH) * D2R,
+  const vh = (att || lk ? yaw : game.visH) * D2R,
     hx = -Math.sin(vh),
     hz = -Math.cos(vh),
     rx = -hz,
     rz = hx,
-    sp = att ? 9 : P.speed;
+    sp = att || lk ? 9 : P.speed;
   for (let i = 0; i < NS; i++) {
     const s = sd[i];
     s.f -= sp * raw;
@@ -808,6 +931,43 @@ function updateHands(raw, now) {
     h.g.scale.setScalar(handScale * (1 + (s * hs.dash > 0 ? 0.04 : 0)));
   }
 }
+function updateRunner(raw, now, live) {
+  const P = game.P;
+  Cos.setGear(runner, Cos.eq.head);
+  runner.root.visible = !!(live && game.third && P);
+  if (!P) return;
+  if (live) {
+    Cos.trailsUpdate(P, raw, now, game.state === 'playing', game.visH);
+    if (runner.root.visible) Cos.pose(runner, P, raw, now, game.visH);
+  }
+}
+let studioOn = false;
+function updateStudio(raw, now) {
+  if (!studioOn) {
+    studioOn = true;
+    studio.add(Cos.group());
+    Cos.trailsClear();
+  }
+  const P = studioP,
+    R = 1.55;
+  P.a += raw * 0.85;
+  P.x = Math.cos(P.a) * R;
+  P.z = Math.sin(P.a) * R;
+  P.stride += (P.speed * raw) / 5.4;
+  const heading = Math.atan2(Math.sin(P.a), -Math.cos(P.a)) * R2D;
+  game.lkKick = damp(game.lkKick, 0, 8, raw);
+  Cos.setGear(studioRunner, Cos.shown.head);
+  Cos.pose(studioRunner, P, raw, now, heading);
+  studioRunner.root.scale.setScalar(1 + game.lkKick * 0.14);
+  Cos.trailsUpdate(P, raw, now, true, heading, Cos.shown.trail);
+}
+function leaveStudio() {
+  if (!studioOn) return;
+  studioOn = false;
+  scene.add(Cos.group());
+  Cos.trailsClear();
+  camera.clearViewOffset();
+}
 function render(now) {
   U.uTime.value = now;
   const dpal = PAL[game.act],
@@ -822,10 +982,11 @@ function render(now) {
   dc(U.uAccent.value, dpal.a, 1.2);
   renderer.setClearColor(U.uFog.value, 1);
   const playing = game.state === 'playing' || game.state === 'dead' || game.state === 'paused';
+  Cos.applyColors(now);
   renderer.setRenderTarget(rt);
   renderer.clear(true, true, true);
-  renderer.render(scene, camera);
-  if (S.hands && playing) {
+  renderer.render(game.state === 'locker' ? studio : scene, camera);
+  if (S.hands && playing && !game.third) {
     renderer.clearDepth();
     renderer.render(vmScene, vmCam);
   }
@@ -849,8 +1010,11 @@ let lastT = performance.now() / 1e3;
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now() / 1e3;
-  let raw = Math.min(0.05, now - lastT);
+  const raw = Math.min(0.05, now - lastT);
   lastT = now;
+  tickFrame(raw, now);
+}
+function tickFrame(raw, now) {
   game.flash = damp(game.flash, 0, 5, raw);
   game.red = damp(game.red, 0, 6, raw);
   const st = game.state;
@@ -861,17 +1025,24 @@ function frame() {
     if (game.deadT > 1.15) doRespawn();
   } else if (st === 'paused') {
     In.update(raw, now, false, false);
-    In.steerCalc();
     labUpdate();
   } else {
     In.update(raw, now, false, false);
-    In.steerCalc();
     if (st === 'settings') labUpdate();
+    if (st === 'calib') Calib.tick();
+    if (st === 'locker') updateStudio(raw, now);
   }
-  if (game.course && game.P && (st === 'playing' || st === 'dead' || st === 'paused')) {
+  if (st !== 'locker') leaveStudio();
+  const inRun = st === 'playing' || st === 'dead' || st === 'paused' || (st === 'calib' && game.calibFrom === 'pause');
+  if (game.course && game.P && inRun) {
     updateCamera(raw, now);
     if (st === 'playing' || st === 'dead') updateHands(st === 'dead' ? 0 : raw, now);
-  } else if (game.course) updateCamera(raw, now);
+    updateRunner(st === 'playing' ? raw : 0, now, true);
+  } else if (game.course) {
+    updateCamera(raw, now);
+    updateRunner(0, now, false);
+  }
+  UI.crosshair(raw);
   if (rt) render(now);
   el.fxr.style.opacity = game.red * 0.8;
 }
@@ -941,6 +1112,8 @@ letters('#t2', 'STATE.', 4);
 $('#ld-tip').textContent = TIPS[Math.floor(Math.random() * TIPS.length)];
 const tick = (ms) => new Promise((r) => setTimeout(r, ms));
 async function boot() {
+  game.applyView();
+  Cos.newlyUnlocked();
   const t0 = performance.now();
   setProg(0.08, 'Waking the renderer');
   resize();
@@ -986,10 +1159,13 @@ function toMenu(wiped) {
     hud(false);
     if (game.course) buildAttract();
     $('#mn-best').textContent = 'Best ' + best + ' m';
+    const nf = Cos.freshCount();
+    $('#mn-new').textContent = nf ? nf + ' new' : '';
     updMode();
     A.intensity(0.2);
     A.setTS(1, false);
     A.slideStop();
+    A.wind(0, false);
   };
   if (wiped) wipe(go);
   else go();
@@ -1001,7 +1177,7 @@ function updMode() {
       ? 'Input: gyro'
       : isTouch
         ? 'No motion sensor: swipe mode. Open in its own tab for gyro'
-        : 'Input: ' + (m === 'keys' ? 'keyboard' : m);
+        : 'Input: ' + (m === 'keys' ? 'keyboard + mouse' : m);
 }
 function hud(on) {
   el.hud.classList.toggle('on', on);
@@ -1015,7 +1191,9 @@ async function startFlow() {
     game.state = 'calib';
     A.intensity(0.15);
     if (modeNow() === 'gyro') {
+      game.state = 'calib';
       show('calib');
+      Calib.open({onDone: beginRun, onCancel: () => wipe(() => toMenu(false))});
     } else beginRun();
   });
 }
@@ -1028,23 +1206,28 @@ function beginRun() {
   game.P.speed = 0;
   bigText('Go.');
   A.setTS(1, false);
+  In.lock();
+  // If the lock did not take (Esc during the transition, or the browser said no) start paused, so a click relocks.
+  setTimeout(() => {
+    if (game.state === 'playing' && In.canLock() && !In.locked) game.pause();
+  }, 600);
 }
-$('#cal-go').onclick = () => {
-  A.ui();
-  beginRun();
-};
-$('#hp').onclick = () => {
-  A.ui();
-  game.pause();
-};
+$('#hp').onclick = () => game.pause();
+$('#hv').onclick = () => game.toggleView();
 let prev = 'menu';
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-a]');
   if (!b) return;
   const a = b.dataset.a;
   A.init();
-  A.ui();
+  if (a === 'play' || a === 'restart') In.lock(); // inside the click, so the browser grants pointer lock
   if (a === 'play') startFlow();
+  else if (a === 'locker') {
+    prev = 'menu';
+    game.state = 'locker';
+    show('locker');
+    Locker.open();
+  } else if (a === 'recal') game.openCalib('pause');
   else if (a === 'how') {
     prev = 'menu';
     game.state = 'how';
@@ -1055,6 +1238,7 @@ document.addEventListener('click', (e) => {
     show('settings');
     buildSettings();
   } else if (a === 'back') {
+    if (game.state === 'locker') Locker.close();
     if (prev === 'pause') {
       show('pause');
     } else toMenu(false);
@@ -1074,287 +1258,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) game.pause();
 });
 addEventListener('blur', () => game.pause());
-const CFG = [
-  {sec: 'Motion'},
-  {
-    k: 'sens',
-    l: 'Snap sensitivity',
-    h: 'Higher means a smaller flick triggers a move',
-    min: 0.4,
-    max: 2.5,
-    st: 0.05,
-    f: (v) => v.toFixed(2) + 'x',
-  },
-  {
-    k: 'steer',
-    l: 'Steer gain',
-    h: 'Higher means less rotation to steer',
-    min: 0.5,
-    max: 2.5,
-    st: 0.05,
-    f: (v) => v.toFixed(2) + 'x',
-  },
-  {k: 'invertPitch', l: 'Invert up/down flick', t: 'tg'},
-  {
-    k: 'mode',
-    l: 'Input',
-    t: 'seg',
-    o: [
-      ['auto', 'Auto'],
-      ['gyro', 'Gyro'],
-      ['touch', 'Touch'],
-      ['keys', 'Keys'],
-    ],
-  },
-  {sensor: 1},
-  {lab: 1},
-  {sec: 'View'},
-  {
-    k: 'fov',
-    l: 'Field of view',
-    min: 60,
-    max: 110,
-    st: 1,
-    f: (v) => v + '°',
-  },
-  {k: 'roll', l: 'Camera roll', min: 0, max: 1, st: 0.05, f: (v) => Math.round(v * 100) + '%'},
-  {k: 'bob', l: 'Head bob', min: 0, max: 1, st: 0.05, f: (v) => Math.round(v * 100) + '%'},
-  {k: 'shake', l: 'Camera shake', min: 0, max: 1, st: 0.05, f: (v) => Math.round(v * 100) + '%'},
-  {k: 'hands', l: 'Show hands', t: 'tg'},
-  {
-    k: 'quality',
-    l: 'Quality',
-    t: 'seg',
-    o: [
-      ['low', 'Low'],
-      ['med', 'Med'],
-      ['high', 'High'],
-    ],
-  },
-  {sec: 'Audio'},
-  {k: 'music', l: 'Music', min: 0, max: 1, st: 0.05, f: (v) => Math.round(v * 100) + '%'},
-  {k: 'sfx', l: 'Effects', min: 0, max: 1, st: 0.05, f: (v) => Math.round(v * 100) + '%'},
-  {k: 'haptics', l: 'Vibration', t: 'tg'},
-  {sec: 'Other'},
-  {reset: 1},
-];
-let labEls = null;
-function buildSettings() {
-  const root = $('#set-body');
-  root.innerHTML = '';
-  for (const c of CFG) {
-    if (c.sec) {
-      const d = document.createElement('div');
-      d.className = 'sec';
-      d.textContent = c.sec;
-      root.appendChild(d);
-      continue;
-    }
-    if (c.sensor) {
-      const d = document.createElement('div');
-      const bar = (id, n) =>
-        `<div class=mt><div class='mono mh'><span>${n}</span><span id=${id}v>0%</span></div><div class=mb><i id=${id}></i><i class=tk></i></div></div>`;
-      d.innerHTML =
-        `<div class='lab lab2'><div class=m><span class=mono>Sensor</span><b id=sc-st>-</b></div><div class=m><span class=mono>Rate</span><b id=sc-hz>0 Hz</b></div><div class=m><span class=mono>Alpha / Beta / Gamma</span><b id=sc-raw class=sm>-</b></div><div class=m><span class=mono>Context</span><b id=sc-ctx class=sm>-</b></div></div><p class='mono note' id=sc-msg></p><div class='mono mt2'>Flick meter. Cross the red line to trigger.</div>` +
-        bar('sm-t', 'Turn (snap sideways)') +
-        bar('sm-l', 'Leap / Slide (flick up or down)') +
-        bar('sm-d', 'Dash (tilt sideways)') +
-        `<div class=btns><button class=btn id=sc-en>Enable motion</button><button class='btn alt' id=sc-re>Recheck</button></div>`;
-      root.appendChild(d);
-      $('#sc-en').onclick = async () => {
-        await In.requestMotion();
-        addEventListener('deviceorientation', In.onOrient, true);
-        updMode();
-      };
-      $('#sc-re').onclick = () => {
-        In.evCount = 0;
-        In.nullCount = 0;
-        In.mCount = 0;
-        A.ui();
-      };
-      continue;
-    }
-    if (c.lab) {
-      const d = document.createElement('div');
-      d.innerHTML = `<div class=lab><div class=m><span class=mono>Yaw</span><b id=lb-y>0</b></div><div class=m><span class=mono>Pitch</span><b id=lb-p>0</b></div><div class=m><span class=mono>Roll</span><b id=lb-r>0</b></div><div class=lamps><span data-g=turn1>Turn L</span><span data-g=turn-1>Turn R</span><span data-g=jump>Leap</span><span data-g=slide>Slide</span><span data-g=dash1>Dash R</span><span data-g=dash-1>Dash L</span></div></div><div class=btns><button class=btn id=lb-re>Recentre</button><button class='btn alt' id=lb-perm>Enable motion</button></div><p class='mono note'>Gesture lab: make each move and watch the lamp. Tune sensitivity until it fires every time and never by accident.</p>`;
-      root.appendChild(d);
-      $('#lb-re').onclick = () => {
-        In.recenter();
-        A.ui();
-      };
-      $('#lb-perm').onclick = async () => {
-        await In.requestMotion();
-        updMode();
-      };
-      labEls = {y: $('#lb-y'), p: $('#lb-p'), r: $('#lb-r'), lamps: $$('.lamps span')};
-      continue;
-    }
-    if (c.reset) {
-      const b = document.createElement('button');
-      b.className = 'btn alt';
-      b.textContent = 'Reset to defaults';
-      b.onclick = () => {
-        Object.assign(S, DEF);
-        saveS();
-        buildSettings();
-        resize();
-        A.setVol();
-      };
-      root.appendChild(b);
-      continue;
-    }
-    const row = document.createElement('div');
-    row.className = 'row';
-    const lab = document.createElement('label');
-    lab.innerHTML = c.l + (c.h ? '<small>' + c.h + '</small>' : '');
-    row.appendChild(lab);
-    if (c.t === 'tg') {
-      const b = document.createElement('button');
-      b.className = 'tg' + (S[c.k] ? ' on' : '');
-      b.setAttribute('role', 'switch');
-      b.setAttribute('aria-checked', !!S[c.k]);
-      b.onclick = () => {
-        S[c.k] = !S[c.k];
-        b.classList.toggle('on', S[c.k]);
-        b.setAttribute('aria-checked', S[c.k]);
-        saveS();
-        A.ui();
-      };
-      row.appendChild(b);
-    } else if (c.t === 'seg') {
-      const d = document.createElement('div');
-      d.className = 'seg';
-      for (const o of c.o) {
-        const b = document.createElement('button');
-        b.textContent = o[1];
-        b.className = S[c.k] === o[0] ? 'on' : '';
-        b.onclick = () => {
-          S[c.k] = o[0];
-          [...d.children].forEach((x) => x.classList.toggle('on', x === b));
-          saveS();
-          A.ui();
-          if (c.k === 'quality') resize();
-          updMode();
-        };
-        d.appendChild(b);
-      }
-      row.appendChild(d);
-    } else {
-      const d = document.createElement('div');
-      d.className = 'rg';
-      const i = document.createElement('input');
-      i.type = 'range';
-      i.min = c.min;
-      i.max = c.max;
-      i.step = c.st;
-      i.value = S[c.k];
-      const o = document.createElement('output');
-      o.textContent = c.f(+S[c.k]);
-      i.oninput = () => {
-        S[c.k] = +i.value;
-        o.textContent = c.f(+i.value);
-        saveS();
-        if (c.k === 'music' || c.k === 'sfx') A.setVol();
-      };
-      i.setAttribute('aria-label', c.l);
-      d.appendChild(i);
-      d.appendChild(o);
-      row.appendChild(d);
-    }
-    root.appendChild(row);
-  }
-}
-function sensorUpdate() {
-  if (!$('#sc-st')) return;
-  const now = performance.now() / 1e3,
-    live = In.evCount > 0 && now - In.evT < 1;
-  const framed = (() => {
-    try {
-      return window !== window.top;
-    } catch (e) {
-      return true;
-    }
-  })();
-  let st = live ? 'LIVE' : In.evCount > 0 ? 'STALLED' : In.perm === 'denied' ? 'BLOCKED' : 'NO DATA';
-  $('#sc-st').textContent = st;
-  $('#sc-st').style.color = live ? '#0a8a3a' : '#ff2a1d';
-  const t = In.evTimes;
-  $('#sc-hz').textContent = (live ? t.length : 0) + ' Hz';
-  $('#sc-raw').textContent = In.evCount ? In.raw.map((v) => Math.round(v)).join(' / ') : '-';
-  $('#sc-ctx').textContent =
-    (framed ? 'EMBEDDED' : 'OWN TAB') + ' / ' + (window.isSecureContext ? 'HTTPS' : 'INSECURE');
-  let m;
-  if (live)
-    m =
-      'Sensor live. Make each move and watch the meter cross the red line. If a bar never gets there, raise Snap sensitivity.';
-  else if (In.perm === 'denied')
-    m =
-      'Motion permission was denied. On iPhone, quit the browser, reopen, and tap Allow. Or enable Motion and Orientation access for this site in Safari settings.';
-  else if (
-    typeof DeviceOrientationEvent !== 'undefined' &&
-    typeof DeviceOrientationEvent.requestPermission === 'function' &&
-    In.perm !== 'granted'
-  )
-    m = 'Tap Enable motion and allow the prompt.';
-  else if (framed)
-    m =
-      'No motion data. This page is embedded, and browsers block the gyro inside embedded pages. Open the link in its own browser tab.';
-  else if (In.nullCount > 0)
-    m =
-      'The browser sends empty sensor data. Motion sensors are off for this site or device. Check site settings for Motion sensors, and turn off battery saver.';
-  else
-    m = 'No motion events yet. Move the phone. If nothing appears, check site settings for Motion sensors.';
-  $('#sc-msg').textContent = m;
-  const h = In.rh;
-  let o = null;
-  for (let i = 0; i < h.length; i++)
-    if (now - h[i][0] <= 0.25) {
-      o = h[i];
-      break;
-    }
-  const k = S.sens;
-  let sy = 0,
-    sp = 0,
-    sr = 0;
-  if (o && live) {
-    sy = Math.abs(wrap180(In.rh[In.rh.length - 1][1] - o[1])) / (30 / k);
-    sp = Math.abs(In.rh[In.rh.length - 1][2] - o[2]) / (11 / k);
-    sr = Math.abs(wrap180(In.rh[In.rh.length - 1][3] - o[3])) / (14 / k);
-  }
-  const set = (id, v) => {
-    const e = $('#' + id);
-    if (!e) return;
-    const pk = Math.max(+(e.dataset.pk || 0) * 0.985, v);
-    e.dataset.pk = pk;
-    e.style.width = Math.min(100, (v / 1.5) * 100) + '%';
-    e.style.background = v >= 1 ? '#ff2a1d' : '#0c0c0f';
-    $('#' + id + 'v').textContent = Math.round(v * 100) + '%  peak ' + Math.round(pk * 100) + '%';
-  };
-  set('sm-t', sy);
-  set('sm-l', sp);
-  set('sm-d', sr);
-}
-function labUpdate() {
-  sensorUpdate();
-  if (!labEls || !$('#lb-y')) return;
-  const m = modeNow();
-  labEls.y.textContent = Math.round(wrap180(In.yaw - In.base)) + '°';
-  labEls.p.textContent = Math.round(In.pitch) + '°';
-  labEls.r.textContent = Math.round(In.roll) + '°';
-  const g = In.lastG,
-    now = performance.now() / 1e3;
-  for (const l of labEls.lamps) {
-    const id = l.dataset.g;
-    const hit =
-      g &&
-      now - g.time < 0.45 &&
-      ((g.t === 'turn' && id === 'turn' + g.dir) ||
-        (g.t === 'jump' && id === 'jump') ||
-        (g.t === 'slide' && id === 'slide') ||
-        (g.t === 'dash' && id === 'dash' + g.dir));
-    l.classList.toggle('hit', !!hit);
-  }
-  In.gq.length = 0;
-}
 boot();
 requestAnimationFrame(frame);
+if (/[?&]debug\b/.test(location.search)) window.__fs = {A, In, Gyro, Cos, game, S, CORE, Calib, UI, tickFrame, camera, runner, K, newRun, beginRun, die, doRespawn, updateCamera};

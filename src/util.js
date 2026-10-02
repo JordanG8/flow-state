@@ -19,7 +19,17 @@ const DEF = {
   sens: 1,
   steer: 1,
   invertPitch: false,
+  invertDash: false,
   mode: 'auto',
+  msens: 1, // mouse look sensitivity
+  invertY: false,
+  lockMouse: true,
+  recentre: false, // ease the view back to centre when the mouse is idle
+  crosshair: 'cross', // cross | dot | ring | off
+  xhSize: 1,
+  xhColor: 'ink', // ink | red | white | auto
+  view: 'first', // first | third
+  cursorFx: true,
   fov: 88,
   roll: 0.5,
   bob: reduce ? 0.2 : 0.6,

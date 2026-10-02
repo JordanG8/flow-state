@@ -12,6 +12,7 @@ const A = (() => {
     windG,
     windF,
     slideN = null,
+    tap = null,
     ready = false;
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12),
     ri = (n) => Math.floor(Math.random() * n);
@@ -41,6 +42,42 @@ const A = (() => {
     ],
     ROOTS = [0, 5, 7, 10, 3, 2];
   const deg = (d) => M.root + M.scale[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7);
+  // Pink noise (Paul Kellet filter) with the loop seam crossfaded, so a looping buffer never clicks or pulses.
+  function makeNoise(c, secs) {
+    const sr = c.sampleRate,
+      fade = (sr * 0.3) | 0,
+      n = ((sr * secs) | 0) + fade,
+      raw = new Float32Array(n);
+    let b0 = 0,
+      b1 = 0,
+      b2 = 0,
+      b3 = 0,
+      b4 = 0,
+      b5 = 0,
+      b6 = 0,
+      pk = 0;
+    for (let i = 0; i < n; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.969 * b2 + w * 0.153852;
+      b3 = 0.8665 * b3 + w * 0.3104856;
+      b4 = 0.55 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.016898;
+      raw[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362;
+      b6 = w * 0.115926;
+      pk = Math.max(pk, Math.abs(raw[i]));
+    }
+    const len = n - fade,
+      buf = c.createBuffer(1, len, sr),
+      d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (raw[i] / pk) * 0.9;
+    for (let i = 0; i < fade; i++) {
+      const t = i / fade;
+      d[i] = d[i] * Math.sin(t * Math.PI * 0.5) + (raw[len + i] / pk) * 0.9 * Math.cos(t * Math.PI * 0.5);
+    }
+    return buf;
+  }
   function init() {
     if (ctx) {
       if (ctx.state === 'suspended') ctx.resume();
@@ -56,8 +93,37 @@ const A = (() => {
     comp.ratio.value = 3;
     comp.attack.value = 0.01;
     comp.release.value = 0.25;
-    master.connect(comp);
-    comp.connect(ctx.destination);
+    // Master EQ: cut sub rumble, tame the 2-4 kHz bite, roll off the top so noise and saws never read as hiss.
+    const eq = [
+      ['highpass', 34, 0.7, 0],
+      ['lowshelf', 140, 0, 1.5],
+      ['peaking', 3100, 0.9, -2],
+      ['highshelf', 7500, 0, -3.5],
+      ['lowpass', 14000, 0.6, 0],
+    ].map(([type, f, q, gain]) => {
+      const b = ctx.createBiquadFilter();
+      b.type = type;
+      b.frequency.value = f;
+      b.Q.value = q;
+      b.gain.value = gain;
+      return b;
+    });
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -3;
+    lim.knee.value = 0;
+    lim.ratio.value = 20;
+    lim.attack.value = 0.002;
+    lim.release.value = 0.08;
+    master.connect(eq[0]);
+    for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
+    eq[eq.length - 1].connect(comp);
+    comp.connect(lim);
+    lim.connect(ctx.destination);
+    if (/[?&]debug(&|$)/.test(location.search)) {
+      tap = ctx.createAnalyser(); // measurement hook for tests: window.__fs.A.tap
+      tap.fftSize = 4096;
+      lim.connect(tap);
+    }
     musicBus = ctx.createGain();
     musicBus.gain.value = 0.55 * S.music;
     musicLP = ctx.createBiquadFilter();
@@ -82,9 +148,17 @@ const A = (() => {
     rev.buffer = ir;
     revIn = ctx.createGain();
     const ro = ctx.createGain();
-    ro.gain.value = 0.55;
+    ro.gain.value = 0.42;
+    const rhp = ctx.createBiquadFilter(),
+      rlp = ctx.createBiquadFilter();
+    rhp.type = 'highpass';
+    rhp.frequency.value = 220;
+    rlp.type = 'lowpass';
+    rlp.frequency.value = 5200;
     revIn.connect(rev);
-    rev.connect(ro);
+    rev.connect(rhp);
+    rhp.connect(rlp);
+    rlp.connect(ro);
     ro.connect(master);
     dlyIn = ctx.createGain();
     const dly = ctx.createDelay(1);
@@ -103,18 +177,14 @@ const A = (() => {
     dlp.connect(dout);
     dout.connect(master);
     dout.connect(revIn);
-    noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-    {
-      const d = noiseBuf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
+    noiseBuf = makeNoise(ctx, 6);
     const ws = ctx.createBufferSource();
     ws.buffer = noiseBuf;
     ws.loop = true;
     windF = ctx.createBiquadFilter();
-    windF.type = 'bandpass';
-    windF.frequency.value = 700;
-    windF.Q.value = 0.6;
+    windF.type = 'lowpass';
+    windF.frequency.value = 500;
+    windF.Q.value = 0.5;
     windG = ctx.createGain();
     windG.gain.value = 0;
     ws.connect(windF);
@@ -180,7 +250,13 @@ const A = (() => {
     g.gain.exponentialRampToValueAtTime(o.g || 0.2, t + (o.a || 0.005));
     g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
     s.connect(f);
-    f.connect(g);
+    if (o.lp) {
+      const l = ctx.createBiquadFilter();
+      l.type = 'lowpass';
+      l.frequency.value = o.lp;
+      f.connect(l);
+      l.connect(g);
+    } else f.connect(g);
     g.connect(o.bus || sfxBus);
     if (o.send) {
       const x = ctx.createGain();
@@ -188,7 +264,7 @@ const A = (() => {
       g.connect(x);
       x.connect(revIn);
     }
-    s.start(t, Math.random() * 1.5);
+    s.start(t, Math.random() * 4);
     s.stop(t + dur + 0.05);
   }
   function genArp() {
@@ -260,9 +336,10 @@ const A = (() => {
         noise(t, 2.2, {
           type: 'bandpass',
           f: 300,
-          f2: 5e3,
+          f2: 3200,
           q: 0.8,
-          g: 0.025,
+          g: 0.016,
+          lp: 4500,
           a: 1.5,
           bus: musicBus,
           send: 0.5,
@@ -283,18 +360,20 @@ const A = (() => {
     ) {
       note(150, t, {type: 'sine', f2: 48, a: 0.002, d: 0.13, g: 0.62});
       noise(t, 0.02, {
-        type: 'highpass',
-        f: 2500,
-        g: 0.08,
+        type: 'bandpass',
+        f: 1800,
+        q: 0.6,
+        g: 0.04,
+        lp: 5000,
         bus: musicBus,
       });
     }
     if (I > 0.35) {
-      if (b % 4 === 2) noise(t, 0.04, {type: 'highpass', f: 7e3, g: 0.05 + 0.03 * I, bus: musicBus});
+      if (b % 4 === 2) noise(t, 0.035, {type: 'highpass', f: 6e3, lp: 11e3, g: 0.042 + 0.026 * I, bus: musicBus});
       else if (I > 0.5 && b % 2 === 1 && Math.random() < I - 0.3)
-        noise(t, 0.025, {type: 'highpass', f: 8e3, g: 0.025, bus: musicBus});
+        noise(t, 0.022, {type: 'highpass', f: 6500, lp: 11e3, g: 0.014, bus: musicBus});
     }
-    if (I > 0.6 && (b === 4 || b === 12)) noise(t, 0.15, {f: 1800, q: 0.9, g: 0.1, bus: musicBus, send: 0.4});
+    if (I > 0.6 && (b === 4 || b === 12)) noise(t, 0.15, {f: 1500, q: 0.9, g: 0.07, lp: 4200, bus: musicBus, send: 0.35});
     const ar = M.arp[b];
     if (ar != null && Math.random() < 0.45 + 0.55 * I) {
       const lad = [d, d + 2, d + 4, d + 6, d + 7, d + 9, d + 11],
@@ -334,6 +413,9 @@ const A = (() => {
   const T = () => ctx.currentTime;
   const api = {
     init: init,
+    get tap() {
+      return tap;
+    },
     get on() {
       return ready;
     },
@@ -356,19 +438,20 @@ const A = (() => {
     },
     wind(v, air) {
       if (!ctx) return;
-      windG.gain.setTargetAtTime(Math.pow(v, 1.3) * 0.2 + (air ? 0.05 : 0), T(), 0.1);
-      windF.frequency.setTargetAtTime(400 + v * 1400, T(), 0.1);
+      // Quiet, dark whoosh that only really opens up at speed. v = 0 closes it completely.
+      windG.gain.setTargetAtTime(v > 0 ? Math.pow(v, 1.8) * 0.1 + (air ? 0.015 : 0) : 0, T(), 0.12);
+      windF.frequency.setTargetAtTime(260 + v * 900, T(), 0.12);
     },
     step(v, alt) {
       if (!ctx) return;
       const t = T();
-      noise(t, 0.07, {f: alt ? 520 : 680, q: 1.2, g: 0.2 * v});
+      noise(t, 0.07, {type: 'lowpass', f: alt ? 380 : 460, q: 0.7, g: 0.11 * v});
       note(alt ? 95 : 112, t, {f2: 60, a: 0.002, d: 0.08, g: 0.16 * v, bus: sfxBus});
     },
     jump() {
       if (!ctx) return;
       const t = T();
-      noise(t, 0.28, {type: 'highpass', f: 500, f2: 2800, g: 0.12});
+      noise(t, 0.28, {f: 450, f2: 1800, q: 0.7, g: 0.06, lp: 3500});
       note(220, t, {f2: 440, a: 0.005, d: 0.2, g: 0.1, bus: sfxBus});
     },
     land(v) {
@@ -376,7 +459,7 @@ const A = (() => {
       const t = T(),
         k = clamp(v / 16, 0.2, 1);
       note(78, t, {f2: 38, a: 0.002, d: 0.18, g: 0.5 * k, bus: sfxBus});
-      noise(t, 0.12, {type: 'lowpass', f: 900, g: 0.2 * k});
+      noise(t, 0.12, {type: 'lowpass', f: 700, g: 0.13 * k});
     },
     slideStart() {
       if (!ctx || slideN) return;
@@ -385,11 +468,11 @@ const A = (() => {
       s.loop = true;
       const f = ctx.createBiquadFilter();
       f.type = 'bandpass';
-      f.frequency.value = 1500;
-      f.Q.value = 1.4;
+      f.frequency.value = 650;
+      f.Q.value = 0.9;
       const g = ctx.createGain();
       g.gain.value = 0;
-      g.gain.setTargetAtTime(0.14, T(), 0.04);
+      g.gain.setTargetAtTime(0.07, T(), 0.04);
       s.connect(f);
       f.connect(g);
       g.connect(sfxBus);
@@ -406,19 +489,19 @@ const A = (() => {
     turn() {
       if (!ctx) return;
       const t = T();
-      noise(t, 0.34, {f: 300, f2: 3600, q: 1.5, g: 0.22, send: 0.3});
+      noise(t, 0.34, {f: 300, f2: 2400, q: 1.2, g: 0.12, lp: 4000, send: 0.3});
       note(880, t, {type: 'square', a: 0.001, d: 0.04, g: 0.05, lp: 3e3, bus: sfxBus});
       note(66, t, {f2: 40, a: 0.002, d: 0.2, g: 0.35, bus: sfxBus});
     },
     dash() {
       if (!ctx) return;
-      noise(T(), 0.18, {f: 900, f2: 3e3, q: 1.2, g: 0.16});
+      noise(T(), 0.18, {f: 700, f2: 2200, q: 1, g: 0.09, lp: 3600});
     },
     pad() {
       if (!ctx) return;
       const t = T();
       note(180, t, {f2: 900, type: 'square', a: 0.003, d: 0.25, g: 0.07, lp: 2400, bus: sfxBus});
-      noise(t, 0.35, {type: 'highpass', f: 800, f2: 4e3, g: 0.14});
+      noise(t, 0.35, {f: 700, f2: 2600, q: 0.8, g: 0.07, lp: 4200});
     },
     gate(n) {
       if (!ctx) return;
@@ -448,6 +531,55 @@ const A = (() => {
       note(520, t, {type: 'square', a: 0.001, d: 0.05, g: 0.05, lp: 3500, bus: sfxBus});
       note(1040, t + 0.04, {type: 'square', a: 0.001, d: 0.07, g: 0.04, lp: 3500, bus: sfxBus});
     },
+    uiHover() {
+      if (!ctx) return;
+      note(1180 * (0.97 + Math.random() * 0.06), T(), {type: 'triangle', a: 0.001, d: 0.035, g: 0.022, lp: 5000, bus: sfxBus});
+    },
+    uiPress() {
+      if (!ctx) return;
+      const t = T();
+      note(170, t, {f2: 72, a: 0.001, d: 0.09, g: 0.2, bus: sfxBus});
+      note(820, t, {type: 'square', a: 0.001, d: 0.03, g: 0.03, lp: 3000, bus: sfxBus});
+    },
+    uiBack() {
+      if (!ctx) return;
+      const t = T();
+      note(660, t, {type: 'triangle', a: 0.001, d: 0.06, g: 0.06, lp: 4000, bus: sfxBus});
+      note(440, t + 0.05, {type: 'triangle', a: 0.001, d: 0.09, g: 0.06, lp: 4000, bus: sfxBus});
+    },
+    uiToggle(on) {
+      if (!ctx) return;
+      const t = T(),
+        a = on ? 700 : 1050,
+        b = on ? 1050 : 700;
+      note(a, t, {type: 'square', a: 0.001, d: 0.04, g: 0.035, lp: 3500, bus: sfxBus});
+      note(b, t + 0.045, {type: 'square', a: 0.001, d: 0.06, g: 0.04, lp: 3500, bus: sfxBus});
+    },
+    uiTick(k) {
+      if (!ctx) return;
+      note(560 + clamp(k, 0, 1) * 1100, T(), {type: 'triangle', a: 0.001, d: 0.025, g: 0.04, lp: 5000, bus: sfxBus});
+    },
+    uiLocked() {
+      if (!ctx) return;
+      const t = T();
+      note(120, t, {type: 'square', a: 0.001, d: 0.1, g: 0.05, lp: 600, bus: sfxBus});
+      note(104, t + 0.07, {type: 'square', a: 0.001, d: 0.12, g: 0.05, lp: 600, bus: sfxBus});
+    },
+    uiEquip() {
+      if (!ctx) return;
+      const t = T();
+      [0, 7, 12].forEach((x, i) =>
+        note(mtof(M.root + 24 + x), t + i * 0.05, {type: 'triangle', a: 0.002, d: 0.35, g: 0.09, send: 0.4, bus: sfxBus})
+      );
+      note(150, t, {f2: 60, a: 0.001, d: 0.1, g: 0.2, bus: sfxBus});
+    },
+    uiUnlock() {
+      if (!ctx) return;
+      const t = T();
+      [0, 4, 7, 12, 16].forEach((x, i) =>
+        note(mtof(M.root + 24 + x), t + i * 0.06, {type: 'triangle', a: 0.002, d: 0.6, g: 0.1, send: 0.6, dly: 0.3, bus: sfxBus})
+      );
+    },
     cp() {
       if (!ctx) return;
       const t = T();
@@ -466,21 +598,22 @@ const A = (() => {
       if (!ctx) return;
       const t = T();
       note(90, t, {f2: 35, a: 0.002, d: 0.3, g: 0.6, bus: sfxBus});
-      noise(t, 0.2, {type: 'lowpass', f: 1200, g: 0.3});
+      noise(t, 0.2, {type: 'lowpass', f: 900, g: 0.2});
     },
     death() {
       if (!ctx) return;
       const t = T();
-      for (let i = 0; i < 20; i++) {
-        const t0 = t + i * 0.011 + Math.random() * 0.05;
-        noise(t0, 0.05 + Math.random() * 0.2, {
-          type: 'highpass',
-          f: 2500 + Math.random() * 5500,
-          g: 0.16,
-          send: 0.4,
+      for (let i = 0; i < 12; i++) {
+        const t0 = t + i * 0.016 + Math.random() * 0.05;
+        noise(t0, 0.05 + Math.random() * 0.18, {
+          f: 900 + Math.random() * 2600,
+          q: 1.4,
+          g: 0.07,
+          lp: 5000,
+          send: 0.35,
         });
         if (i % 4 === 0)
-          note(2200 + Math.random() * 3e3, t0, {a: 0.001, d: 0.5, g: 0.03, send: 0.6, bus: sfxBus});
+          note(1800 + Math.random() * 2e3, t0, {a: 0.001, d: 0.5, g: 0.022, send: 0.6, bus: sfxBus});
       }
       note(120, t, {f2: 28, a: 0.003, d: 1, g: 0.6, bus: sfxBus});
       musicBus.gain.cancelScheduledValues(t);
@@ -489,7 +622,7 @@ const A = (() => {
     },
     rise() {
       if (!ctx) return;
-      noise(T(), 0.7, {f: 200, f2: 6e3, q: 0.9, g: 0.16, a: 0.5, send: 0.4});
+      noise(T(), 0.7, {f: 200, f2: 3500, q: 0.9, g: 0.08, lp: 4500, a: 0.5, send: 0.35});
     },
   };
   return api;
