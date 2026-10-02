@@ -19,6 +19,7 @@ const DEF = {
   sens: 1,
   steer: 1,
   invertPitch: false,
+  assist: 0.85, // aim assist for gyro / touch: centres you on the path, hardest right after a turn
   invertDash: false,
   mode: 'auto',
   msens: 1, // mouse look sensitivity

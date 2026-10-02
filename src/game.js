@@ -710,7 +710,10 @@ function stepGame(raw, now) {
   }
   for (const g of In.gq) P.q.push(g);
   In.gq.length = 0;
-  P.steer = In.steer;
+  {
+    const m = modeNow();
+    P.steer = CORE.aimAssist(c, P, In.steer, m === 'gyro' || m === 'touch' ? S.assist : 0);
+  }
   const spd = 15 + 8.5 * clamp(P.dist / 2800, 0, 1);
   P.speedT = Math.max(spd + game.flow * 3.4, spd);
   CORE.stepP(c, P, dt);

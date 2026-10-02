@@ -7,6 +7,7 @@ const CFG = [
   {sec: 'Motion', only: 'touch'},
   {k: 'sens', l: 'Snap sensitivity', h: 'Higher means a smaller flick triggers a move', min: 0.4, max: 2.5, st: 0.05, f: x2, only: 'touch'},
   {k: 'steer', l: 'Steer gain', h: 'Higher means less twist to steer', min: 0.5, max: 2.5, st: 0.05, f: x2, only: 'touch'},
+  {k: 'assist', l: 'Aim assist', h: 'Keeps you on the path. Strongest for a quarter second after every turn', min: 0, max: 1, st: 0.05, f: pct, only: 'touch'},
   {k: 'invertPitch', l: 'Invert up/down flick', t: 'tg', only: 'touch'},
   {k: 'invertDash', l: 'Invert dash tilt', t: 'tg', only: 'touch'},
   {calib: 1, only: 'touch'},
