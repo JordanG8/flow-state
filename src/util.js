@@ -37,6 +37,7 @@ const DEF = {
   hands: true,
   quality: isMobile ? 'med' : 'high',
   music: 0.7,
+  bass: 0.35, // low end: small speakers want less, headphones more
   sfx: 0.8,
   haptics: true,
 };

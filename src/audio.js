@@ -12,6 +12,7 @@ const A = (() => {
     windG,
     windF,
     slideN = null,
+    eqLow = null,
     tap = null,
     ready = false;
   const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12),
@@ -78,6 +79,15 @@ const A = (() => {
     }
     return buf;
   }
+  // Bass 0..1. Laptop and phone speakers cannot reproduce anything below ~100 Hz: they rattle, distort, or their
+  // protection DSP ducks the whole mix. Low Bass rolls the sub out of the master and keeps synth tails above it.
+  const bass = () => (S.bass == null ? 0.35 : S.bass);
+  const lo = (f) => f + (1 - bass()) * 40; // end pitch of a falling thump
+  function applyBass() {
+    if (!eqLow) return;
+    eqLow[0].frequency.value = 34 + (1 - bass()) * 90;
+    eqLow[1].gain.value = 1.5 * bass();
+  }
   function init() {
     if (ctx) {
       if (ctx.state === 'suspended') ctx.resume();
@@ -85,7 +95,13 @@ const A = (() => {
     }
     const C = window.AudioContext || window.webkitAudioContext;
     if (!C) return;
-    ctx = new C();
+    // A slightly larger buffer than the default: a busy frame (WebGL) otherwise starves the audio thread, which is the
+    // 'record static' crackle. Costs ~30 ms of latency on effects.
+    try {
+      ctx = new C({latencyHint: 0.04});
+    } catch (e) {
+      ctx = new C();
+    }
     master = ctx.createGain();
     master.gain.value = 0.9;
     const comp = ctx.createDynamicsCompressor();
@@ -108,12 +124,14 @@ const A = (() => {
       b.gain.value = gain;
       return b;
     });
+    eqLow = eq;
+    applyBass();
     const lim = ctx.createDynamicsCompressor();
-    lim.threshold.value = -3;
-    lim.knee.value = 0;
-    lim.ratio.value = 20;
-    lim.attack.value = 0.002;
-    lim.release.value = 0.08;
+    lim.threshold.value = -2;
+    lim.knee.value = 4;
+    lim.ratio.value = 12;
+    lim.attack.value = 0.005;
+    lim.release.value = 0.14;
     master.connect(eq[0]);
     for (let i = 0; i < eq.length - 1; i++) eq[i].connect(eq[i + 1]);
     eq[eq.length - 1].connect(comp);
@@ -200,6 +218,7 @@ const A = (() => {
     setInterval(tick, 28);
   }
   function note(f, t, o) {
+    t = Math.max(t, ctx.currentTime + 0.004);
     const g = ctx.createGain(),
       osc = ctx.createOscillator();
     osc.type = o.type || 'sine';
@@ -237,6 +256,7 @@ const A = (() => {
     osc.stop(t + a + d + 0.06);
   }
   function noise(t, dur, o) {
+    t = Math.max(t, ctx.currentTime + 0.004);
     const s = ctx.createBufferSource();
     s.buffer = noiseBuf;
     s.loop = true;
@@ -347,7 +367,7 @@ const A = (() => {
     }
     const d = M.prog[bar % 4];
     if (M.bassPat.indexOf(b) >= 0) {
-      const m = deg(d) - 12;
+      const m = deg(d) - (bass() > 0.65 ? 12 : 0);
       note(mtof(m), t, {type: 'sine', a: 0.01, d: 0.34, g: 0.26 * (0.55 + 0.45 * I)});
       note(mtof(m + 12), t, {type: 'triangle', a: 0.01, d: 0.22, g: 0.05, lp: 700});
     }
@@ -358,7 +378,7 @@ const A = (() => {
         (b === 14 && I > 0.55 && Math.random() < 0.4) ||
         (b === 10 && I > 0.7 && Math.random() < 0.35))
     ) {
-      note(150, t, {type: 'sine', f2: 48, a: 0.002, d: 0.13, g: 0.62});
+      note(150, t, {type: 'sine', f2: lo(48), a: 0.002, d: 0.13, g: 0.5 + 0.12 * bass()});
       noise(t, 0.02, {
         type: 'bandpass',
         f: 1800,
@@ -403,8 +423,8 @@ const A = (() => {
     if (!ctx || ctx.state !== 'running') return;
     M.I += (M.Ti - M.I) * 0.02;
     const now = ctx.currentTime;
-    if (M.t < now - 0.3) M.t = now + 0.05;
-    while (M.t < now + 0.2) {
+    if (M.t < now + 0.01) M.t = now + 0.06; // we fell behind (long frame): skip ahead rather than play late
+    while (M.t < now + 0.35) {
       sched(M.step, M.t);
       M.t += 60 / (104 + M.I * 18) / 4 / Math.max(0.5, M.ts);
       M.step++;
@@ -421,6 +441,7 @@ const A = (() => {
     },
     setVol() {
       if (!ctx) return;
+      applyBass();
       musicBus.gain.value = 0.55 * S.music;
       sfxBus.gain.value = 0.9 * S.sfx;
     },
@@ -458,7 +479,7 @@ const A = (() => {
       if (!ctx) return;
       const t = T(),
         k = clamp(v / 16, 0.2, 1);
-      note(78, t, {f2: 38, a: 0.002, d: 0.18, g: 0.5 * k, bus: sfxBus});
+      note(80, t, {f2: lo(38), a: 0.002, d: 0.18, g: (0.4 + 0.1 * bass()) * k, bus: sfxBus});
       noise(t, 0.12, {type: 'lowpass', f: 700, g: 0.13 * k});
     },
     slideStart() {
@@ -597,7 +618,7 @@ const A = (() => {
     impact() {
       if (!ctx) return;
       const t = T();
-      note(90, t, {f2: 35, a: 0.002, d: 0.3, g: 0.6, bus: sfxBus});
+      note(100, t, {f2: lo(35), a: 0.002, d: 0.3, g: 0.45 + 0.15 * bass(), bus: sfxBus});
       noise(t, 0.2, {type: 'lowpass', f: 900, g: 0.2});
     },
     death() {
@@ -615,7 +636,7 @@ const A = (() => {
         if (i % 4 === 0)
           note(1800 + Math.random() * 2e3, t0, {a: 0.001, d: 0.5, g: 0.022, send: 0.6, bus: sfxBus});
       }
-      note(120, t, {f2: 28, a: 0.003, d: 1, g: 0.6, bus: sfxBus});
+      note(130, t, {f2: lo(28), a: 0.003, d: 1, g: 0.45 + 0.15 * bass(), bus: sfxBus});
       musicBus.gain.cancelScheduledValues(t);
       musicBus.gain.setValueAtTime(0.55 * S.music * 0.15, t);
       musicBus.gain.linearRampToValueAtTime(0.55 * S.music, t + 1.6);
