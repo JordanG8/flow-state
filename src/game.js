@@ -35,7 +35,7 @@ const U = {
   uTrim: {value: new THREE.Vector4(0, 0, 0, 0)},
 };
 const VS = `attribute vec2 aSize;attribute vec3 aInfo;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; void main(){vec4 wp=modelMatrix*vec4(position,1.);vW=wp.xyz;vN=normalize(mat3(modelMatrix)*normal);vUv=uv;vSize=aSize;vInfo=aInfo;vec4 mv=viewMatrix*wp;vD=-mv.z;gl_Position=projectionMatrix*mv;}`;
-const FS = `precision highp float;uniform float uTime,uFogDen;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;uniform vec4 uBody,uTrim;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=.03+vD*.0007;float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} else if(kind>6.5&&kind<7.5){col=uLight*mix(lit,1.,.35);if(uBody.w>.5){col=uBody.rgb*lit;edgeC=mix(uInk,vec3(.93),step(dot(uBody.rgb,vec3(.33)),.22));}} else if(kind>7.5&&kind<8.5){if(uTrim.w>.5){col=uTrim.rgb*(.8+.2*lit);}else{float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);}} float lw=1.-smoothstep(edgeW,edgeW+fwidth(ed)*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade); float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);col+=(h21(gl_FragCoord.xy)-.5)*.006;gl_FragColor=vec4(col,1.);}`;
+const FS = `precision highp float;uniform float uTime,uFogDen;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;uniform vec4 uBody,uTrim;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=.03+vD*.0007;float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} else if(kind>6.5&&kind<7.5){col=uLight*mix(lit,1.,.35);if(uBody.w>.5){col=uBody.rgb*lit;edgeC=mix(uInk,vec3(.93),step(dot(uBody.rgb,vec3(.33)),.22));}} else if(kind>7.5&&kind<8.5){if(uTrim.w>.5){col=uTrim.rgb*(.8+.2*lit);}else{float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);}} float fw=fwidth(ed);if(efade>0.){float lw=1.-smoothstep(edgeW,edgeW+fw*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade);} float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);gl_FragColor=vec4(col,1.);}`;
 const mainMat = new THREE.ShaderMaterial({
   uniforms: U,
   vertexShader: VS,
@@ -62,10 +62,8 @@ sun.scale.set(150, 150, 1);
 scene.add(sun);
 sun.frustumCulled = false;
 const SUNDIR = new THREE.Vector3(-0.35, 0.2, -0.9).normalize();
-const postMat = new THREE.ShaderMaterial({
-  depthTest: false,
-  depthWrite: false,
-  uniforms: {
+const postFS = `precision highp float;uniform sampler2D tS;uniform vec2 uRes;uniform float uTime,uBlur,uChroma,uVig,uSlow,uFlash,uRed,uShat;varying vec2 vUv; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} vec2 h22(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);} void main(){vec2 uv=vUv;float asp=uRes.x/uRes.y;float crack=0.; if(uShat>.001){vec2 p=vec2(uv.x*asp,uv.y)*4.2;vec2 ip=floor(p),fp=fract(p);float d1=9.,d2=9.;vec2 id=vec2(0.);  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(float(i),float(j));vec2 o=h22(ip+g);vec2 pt=g+.5+.42*sin(6.2831*o+3.);float d=length(pt-fp);if(d<d1){d2=d1;d1=d;id=ip+g;}else if(d<d2){d2=d;}}  vec2 hd=h22(id)-.5;float s=uShat*uShat;uv+=vec2(hd.x/asp,hd.y)*s*.5+vec2(0.,-s*.35*h21(id));crack=1.-smoothstep(0.,.06,d2-d1);} vec2 d=uv-.5;float r=length(d);float bl=uBlur*smoothstep(.1,.8,r);float ca=uChroma*r*.012;vec3 c=vec3(0.); for(int i=0;i<4;i++){float t=float(i)/3.;vec2 u=uv-d*bl*t;c+=vec3(texture2D(tS,u-d*ca).r,texture2D(tS,u).g,texture2D(tS,u+d*ca).b);} c/=4.; c*=1.-uVig*smoothstep(.3,.95,r*1.2); float l=dot(c,vec3(.3,.59,.11));c=mix(c,vec3(l),uSlow*.4);c=mix(c,c*c*(3.-2.*c),.22); c=mix(c,vec3(1.,.1,.07),uRed*smoothstep(.25,.9,r)*.55); c=mix(c,vec3(.06),crack*clamp(uShat*6.,0.,1.));c=mix(c,vec3(1.),smoothstep(.75,1.,uShat)); c=mix(c,vec3(1.),uFlash);c+=(h21(gl_FragCoord.xy)-.5)*.006;gl_FragColor=vec4(c,1.);}`;
+const postU = {
     tS: {value: null},
     uRes: {
       value: new THREE.Vector2(1, 1),
@@ -78,21 +76,42 @@ const postMat = new THREE.ShaderMaterial({
     uFlash: {value: 0},
     uRed: {value: 0},
     uShat: {value: 0},
-  },
-  vertexShader: 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}',
-  fragmentShader: `precision highp float;uniform sampler2D tS;uniform vec2 uRes;uniform float uTime,uBlur,uChroma,uVig,uSlow,uFlash,uRed,uShat;varying vec2 vUv; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} vec2 h22(vec2 p){return fract(sin(vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3))))*43758.5453);} void main(){vec2 uv=vUv;float asp=uRes.x/uRes.y;float crack=0.; if(uShat>.001){vec2 p=vec2(uv.x*asp,uv.y)*4.2;vec2 ip=floor(p),fp=fract(p);float d1=9.,d2=9.;vec2 id=vec2(0.);  for(int j=-1;j<=1;j++)for(int i=-1;i<=1;i++){vec2 g=vec2(float(i),float(j));vec2 o=h22(ip+g);vec2 pt=g+.5+.42*sin(6.2831*o+3.);float d=length(pt-fp);if(d<d1){d2=d1;d1=d;id=ip+g;}else if(d<d2){d2=d;}}  vec2 hd=h22(id)-.5;float s=uShat*uShat;uv+=vec2(hd.x/asp,hd.y)*s*.5+vec2(0.,-s*.35*h21(id));crack=1.-smoothstep(0.,.06,d2-d1);} vec2 d=uv-.5;float r=length(d);float bl=uBlur*smoothstep(.1,.8,r);float ca=uChroma*r*.012;vec3 c=vec3(0.); for(int i=0;i<4;i++){float t=float(i)/3.;vec2 u=uv-d*bl*t;c+=vec3(texture2D(tS,u-d*ca).r,texture2D(tS,u).g,texture2D(tS,u+d*ca).b);} c/=4.; c*=1.-uVig*smoothstep(.3,.95,r*1.2); float l=dot(c,vec3(.3,.59,.11));c=mix(c,vec3(l),uSlow*.4);c=mix(c,c*c*(3.-2.*c),.22); c=mix(c,vec3(1.,.1,.07),uRed*smoothstep(.25,.9,r)*.55); c=mix(c,vec3(.06),crack*clamp(uShat*6.,0.,1.));c=mix(c,vec3(1.),smoothstep(.75,1.,uShat)); c=mix(c,vec3(1.),uFlash);c+=(h21(gl_FragCoord.xy)-.5)*.006;gl_FragColor=vec4(c,1.);}`,
-});
+};
+const postVS = 'varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}';
+// Three cost tiers of the same pass: 12 texture reads (full), 6 (mid), 1 (lite, no blur or fringing).
+const POSTLOOP = 'vec3 c=vec3(0.); for(int i=0;i<4;i++){float t=float(i)/3.;vec2 u=uv-d*bl*t;c+=vec3(texture2D(tS,u-d*ca).r,texture2D(tS,u).g,texture2D(tS,u+d*ca).b);} c/=4.;';
+const mkPost = (loop) =>
+  new THREE.ShaderMaterial({
+    depthTest: false,
+    depthWrite: false,
+    uniforms: postU,
+    vertexShader: postVS,
+    fragmentShader: postFS.replace(POSTLOOP, loop),
+  });
+const postMats = [
+  mkPost(POSTLOOP),
+  mkPost(POSTLOOP.replace('<4', '<2').replace('/3.', '/1.').replace('/=4.', '/=2.')),
+  mkPost('vec3 c=texture2D(tS,uv).rgb;'),
+];
+const postMat = postMats[0];
+let postQuad;
 const postScene = new THREE.Scene(),
   postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 {
-  const m = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat);
-  m.frustumCulled = false;
-  postScene.add(m);
+  postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat);
+  postQuad.frustumCulled = false;
+  postScene.add(postQuad);
 }
 let rt = null;
-const QS = {low: {s: 0.6, ms: 0}, med: {s: 0.8, ms: 2}, high: {s: 1, ms: 4}};
+// Scene scale and MSAA per tier. Med has no MSAA: the art is hard-edged boxes with shader outlines, and a multisampled
+// target costs a resolve plus memory traffic every frame on a tile-based mobile GPU.
+const QS = {low: {s: 0.6, ms: 0}, med: {s: 0.75, ms: 0}, high: {s: 1, ms: 4}};
+const SAVER = {s: 0.55, ms: 0};
+const qs = () => (S.saver ? SAVER : QS[S.quality]);
+// Backing-store density. The final pass shades every canvas pixel, so on phones it is capped well under native DPR.
+const outDpr = () => (S.saver ? 1 : Math.min(devicePixelRatio || 1, isMobile ? 1.5 : 2));
 function makeRT(w, h) {
-  const ms = isGL2 ? QS[S.quality].ms : 0;
+  const ms = isGL2 ? qs().ms : 0;
   let r;
   if (ms) {
     r = new THREE.WebGLMultisampleRenderTarget(w, h, {
@@ -113,13 +132,13 @@ let aspect = 1;
 function resize() {
   const w = innerWidth,
     h = innerHeight,
-    dpr = Math.min(devicePixelRatio || 1, 2);
+    dpr = outDpr();
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h);
   if (rt) rt.dispose();
   rt = makeRT(
-    Math.max(2, Math.floor(w * dpr * QS[S.quality].s)),
-    Math.max(2, Math.floor(h * dpr * QS[S.quality].s)),
+    Math.max(2, Math.floor(w * dpr * qs().s)),
+    Math.max(2, Math.floor(h * dpr * qs().s)),
   );
   aspect = w / h;
   camera.aspect = aspect;
@@ -1007,13 +1026,21 @@ function render(now) {
   u.uFlash.value = game.flash;
   u.uRed.value = game.red;
   u.uShat.value = game.state === 'dead' ? clamp(game.deadT / 1, 0, 1) : 0;
+  // Calm moments need no blur or fringing; saver never goes past the mid tier.
+  const tier = u.uShat > 0.001 ? 0 : u.uBlur > 0.02 ? 0 : u.uBlur > 0.008 ? 1 : 2;
+  postQuad.material = postMats[S.saver ? Math.max(tier, 1) : tier];
   renderer.render(postScene, postCam);
   el.fxf.style.opacity = 0;
 }
 let lastT = performance.now() / 1e3;
+// Frame pacing. A 120 Hz phone would otherwise render 120 fps for a game simulated at 60. Anything that is not live
+// play (menus, pause, settings, locker) idles at 30. A skipped frame leaves lastT alone so game time stays exact.
+const FAST = {playing: 1, dead: 1, calib: 1};
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now() / 1e3;
+  const cap = FAST[game.state] ? 60 : 30;
+  if (now - lastT < 1 / cap - 0.003) return;
   const raw = Math.min(0.05, now - lastT);
   lastT = now;
   tickFrame(raw, now);
@@ -1265,6 +1292,7 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) game.pause();
+  A.hush(document.hidden);
 });
 addEventListener('blur', () => game.pause());
 boot();

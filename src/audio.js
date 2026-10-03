@@ -215,7 +215,7 @@ const A = (() => {
     M.t = ctx.currentTime + 0.15;
     M.step = 0;
     ready = true;
-    setInterval(tick, 28);
+    setInterval(tick, 55); // the scheduler looks 350 ms ahead, so a slower poll is inaudible and wakes the CPU half as often
   }
   function note(f, t, o) {
     t = Math.max(t, ctx.currentTime + 0.004);
@@ -433,6 +433,12 @@ const A = (() => {
   const T = () => ctx.currentTime;
   const api = {
     init: init,
+    // Suspend the whole audio graph while the page is hidden (no scheduler work, no DSP).
+    hush(on) {
+      if (!ctx) return;
+      if (on) ctx.suspend();
+      else if (ctx.state === 'suspended') ctx.resume();
+    },
     get tap() {
       return tap;
     },

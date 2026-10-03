@@ -37,6 +37,7 @@ const DEF = {
   shake: reduce ? 0.2 : 0.6,
   hands: true,
   quality: isMobile ? 'med' : 'high',
+  saver: false, // battery saver: lower resolution, lighter post pass, no MSAA
   music: 0.7,
   bass: 0.35, // low end: small speakers want less, headphones more
   sfx: 0.8,
