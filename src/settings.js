@@ -7,6 +7,7 @@ const CFG = [
   {sec: 'Motion', only: 'touch'},
   {k: 'sens', l: 'Snap sensitivity', h: 'Higher means a smaller flick triggers a move', min: 0.4, max: 2.5, st: 0.05, f: x2, only: 'touch'},
   {k: 'steer', l: 'Steer gain', h: 'Higher means less twist to steer', min: 0.5, max: 2.5, st: 0.05, f: x2, only: 'touch'},
+  {k: 'auto', l: 'Auto-centre', h: 'Straight ahead follows the way you hold the phone, so you never have to shift your stance. 0 only re-centres after moves', min: 0, max: 2, st: 0.05, f: pct, only: 'touch'},
   {k: 'assist', l: 'Aim assist', h: 'Keeps you on the path. Strongest for a quarter second after every turn', min: 0, max: 1, st: 0.05, f: pct, only: 'touch'},
   {k: 'invertPitch', l: 'Invert up/down flick', t: 'tg', only: 'touch'},
   {k: 'invertDash', l: 'Invert dash tilt', t: 'tg', only: 'touch'},
@@ -219,7 +220,7 @@ function buildSettings() {
       const bar = (id, n) =>
         `<div class=mt><div class='mono mh'><span>${n}</span><span id=${id}v>0%</span></div><div class=mb><i id=${id}></i><i class=tk></i></div></div>`;
       d.innerHTML =
-        `<div class='lab lab2'><div class=m><span class=mono>Sensor</span><b id=sc-st>-</b></div><div class=m><span class=mono>Rate</span><b id=sc-hz>0 Hz</b></div><div class=m><span class=mono>Alpha / Beta / Gamma</span><b id=sc-raw class=sm>-</b></div><div class=m><span class=mono>Context</span><b id=sc-ctx class=sm>-</b></div></div><p class='mono note' id=sc-msg></p><div class='mono mt2'>Flick meter. Cross the red line to trigger.</div>` +
+        `<div class='lab lab2'><div class=m><span class=mono>Sensor</span><b id=sc-st>-</b></div><div class=m><span class=mono>Rate</span><b id=sc-hz>0 Hz</b></div><div class=m><span class=mono>Alpha / Beta / Gamma</span><b id=sc-raw class=sm>-</b></div><div class=m><span class=mono>Context</span><b id=sc-ctx class=sm>-</b></div><div class=m><span class=mono>Motion from</span><b id=sc-src class=sm>-</b></div><div class=m><span class=mono>Centre</span><b id=sc-ctr class=sm>-</b></div></div><p class='mono note' id=sc-msg></p><div class='mono mt2'>Flick meter. Cross the red line to trigger.</div>` +
         bar('sm-t', 'Turn (twist)') +
         bar('sm-l', 'Leap / Slide (flick up or down)') +
         bar('sm-d', 'Dash (tilt like a key)') +
@@ -227,20 +228,22 @@ function buildSettings() {
       root.appendChild(d);
       $('#sc-en').onclick = async () => {
         await In.requestMotion();
-        addEventListener('deviceorientation', In.onOrient, true);
+        In.listen();
         updMode();
       };
       $('#sc-re').onclick = () => {
         In.evCount = 0;
         In.nullCount = 0;
         In.mCount = 0;
+        In.wCount = 0;
+        Gyro.resetTel(); // re-check the gyro from scratch
       };
       continue;
     }
     if (c.lab) {
       const d = document.createElement('div');
       d.style.setProperty('--n', idx++);
-      d.innerHTML = `<div class=lab><div class=m><span class=mono>Twist</span><b id=lb-y>0</b></div><div class=m><span class=mono>Flick</span><b id=lb-p>0</b></div><div class=m><span class=mono>Tilt</span><b id=lb-r>0</b></div><div class=lamps><span data-g=turn1>Turn L</span><span data-g=turn-1>Turn R</span><span data-g=jump>Leap</span><span data-g=slide>Slide</span><span data-g=dash1>Dash R</span><span data-g=dash-1>Dash L</span></div></div><div class=btns><button class=btn id=lb-re>Re-zero</button><button class='btn alt' id=lb-perm>Enable motion</button></div><p class='mono note'>Gesture lab: make each move and watch the lamp. Angles are measured from your neutral pose and re-zero after every flick.</p>`;
+      d.innerHTML = `<div class=lab><div class=m><span class=mono>Twist</span><b id=lb-y>0</b></div><div class=m><span class=mono>Flick</span><b id=lb-p>0</b></div><div class=m><span class=mono>Tilt</span><b id=lb-r>0</b></div><div class=lamps><span data-g=turn1>Turn L</span><span data-g=turn-1>Turn R</span><span data-g=jump>Leap</span><span data-g=slide>Slide</span><span data-g=dash1>Dash R</span><span data-g=dash-1>Dash L</span></div></div><div class=btns><button class=btn id=lb-re>Re-zero</button><button class='btn alt' id=lb-perm>Enable motion</button></div><p class='mono note'>Gesture lab: make each move and watch the lamp. Angles are measured from your stance: wherever your hand comes to rest after a move is the new centre, and the centre drifts along with you while you hold still.</p>`;
       root.appendChild(d);
       $('#lb-re').onclick = () => In.recenter();
       $('#lb-perm').onclick = async () => {
@@ -322,6 +325,17 @@ function sensorUpdate() {
   $('#sc-hz').textContent = (live ? In.evTimes.length : 0) + ' Hz';
   $('#sc-raw').textContent = In.evCount ? In.raw.map((v) => Math.round(v)).join(' / ') : '-';
   $('#sc-ctx').textContent = (framed ? 'EMBEDDED' : 'OWN TAB') + ' / ' + (window.isSecureContext ? 'HTTPS' : 'INSECURE');
+  const T = Gyro.tel;
+  $('#sc-src').textContent = !live
+    ? '-'
+    : T.src === 'gyro'
+      ? (T.qo ? 'GYRO, CHECKED' : 'GYRO + GRAVITY') + (Math.abs(T.sc) > 2 ? ' (RAD/S)' : '')
+      : In.wCount ? 'ORIENTATION (GYRO UNCHECKED)' : 'ORIENTATION';
+  $('#sc-ctr').textContent = !live
+    ? '-'
+    : Gyro.st.flick
+      ? 'SETTLING'
+      : (Gyro.st.follow > 2 ? 'FOLLOWING YOU' : 'STEADY') + (T.body > 0.4 ? ', BODY MOVING' : '');
   let m;
   if (live)
     m = 'Sensor live. Make each move and watch the meter cross the red line. If a bar never gets there, raise Snap sensitivity or recalibrate.';

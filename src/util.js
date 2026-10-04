@@ -20,6 +20,7 @@ const DEF = {
   steer: 1,
   invertPitch: false,
   assist: 0.85, // aim assist for gyro / touch: centres you on the path, hardest right after a turn
+  auto: 1, // gyro auto-centre: how fast the neutral follows the way you hold the phone (0 = only after moves)
   invertDash: false,
   mode: 'auto',
   msens: 1, // mouse look sensitivity
