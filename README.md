@@ -12,6 +12,16 @@ Plain HTML/JS on top of three.js (loaded from a CDN). No build step: `src/` is d
 (twist left/right, then flick up/down) so the game learns the axes your wrist actually moves around. Slow rotation
 steers; a fast flick is a move, and every flick re-zeroes itself, so you never have to turn to face another direction.
 
+Straight ahead is wherever you hold the phone, and it keeps up with you while you play. Wherever your hand comes to rest
+after a move becomes the new centre. If your arms sag or your body turns, the centre slowly follows, so you never have
+to shift your stance to keep running straight (*Auto-centre* in Settings sets how fast; 0 means only after moves).
+Coming back after holding a flick out is not a new move: it only counts if it carries the phone past where it started.
+
+All the phone's motion sensors feed this. The gyroscope, once it has been checked against the orientation sensor, says
+how your hand actually moved, so compass corrections and orientation drift never read as input. The orientation sensor
+covers phones whose gyro reads wrong. The accelerometer tells a whole-body shift (re-centre faster) from a wrist move,
+and checks the gyro on phones that have no orientation sensor.
+
 | Move | Gesture |
 | --- | --- |
 | Steer | twist slowly |
@@ -47,7 +57,7 @@ src/
   style.css       original look
   ui.css          tactile controls, crosshair, calibration, locker
   core.js         deterministic course generator + player physics (no DOM)
-  gyro.js         pose-independent gesture engine + calibration solver (no DOM)
+  gyro.js         sensor fusion, stance tracking, gesture engine, calibration solver (no DOM)
   input.js        gyro / keyboard + mouse / touch -> gestures, steer, camera view
   calib.js        the "spin it" calibration screen
   audio.js        procedural music + effects, master EQ chain
@@ -56,7 +66,9 @@ src/
   settings.js     settings screen, pause quick panel, gesture lab
   ui.js           hover/press feedback, crosshair, toasts, cursor effect
   game.js         renderer, camera, game loop, screens
-tests/gyro.test.js  numeric tests for the gesture engine and calibration
+tests/gyro.test.js    numeric tests for the gesture engine and calibration
+tests/stance.test.js  the centre following a drifting stance, sloppy returns, gyro / orientation / accelerometer fusion
+tests/assist.test.js  aim assist through corners
 scripts/dev-server.py
 ```
 
@@ -64,7 +76,7 @@ scripts/dev-server.py
 
 ```
 npm run dev     # http://localhost:5173, no caching
-npm test        # gesture engine + calibration tests
+npm test        # gesture engine, stance + sensor fusion, calibration, aim assist tests
 ```
 
 Add `?debug` to the URL to expose `window.__fs` (game, input, gyro, audio analyser tap) for poking from the console.

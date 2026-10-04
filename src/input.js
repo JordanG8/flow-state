@@ -19,6 +19,7 @@ const In = {
   evCount: 0,
   nullCount: 0,
   mCount: 0,
+  wCount: 0, // devicemotion events that carried a gyro reading
   evT: 0,
   raw: [0, 0, 0],
   evTimes: [],
@@ -36,29 +37,48 @@ In.saveCal = () => {
     localStorage.setItem('fs_gyro', JSON.stringify({t: c.t, f: c.f, d: c.d, amp: c.amp}));
   } catch (e) {}
 };
+// Every sensor goes to Gyro, which decides what drives the engine (the gyro once it has been checked against the
+// orientation stream, else the orientation). A phone that only reports devicemotion still gets gyro play.
+const fed = (t, n0) => {
+  if (Gyro.st.nFeed === n0) return;
+  In.got = true;
+  In.evCount++;
+  In.evT = t;
+  In.evTimes.push(t);
+  while (In.evTimes.length && t - In.evTimes[0] > 1) In.evTimes.shift();
+};
 In.onOrient = (ev) => {
   if (ev.beta == null || ev.alpha == null || ev.gamma == null) {
     In.nullCount++;
     return;
   }
-  In.got = true;
-  const t = performance.now() / 1e3;
-  In.evCount++;
-  In.evT = t;
+  const t = performance.now() / 1e3,
+    n0 = Gyro.st.nFeed;
   In.raw = [ev.alpha, ev.beta, ev.gamma];
-  In.evTimes.push(t);
-  while (In.evTimes.length && t - In.evTimes[0] > 1) In.evTimes.shift();
-  Gyro.feed(Gyro.fromEuler(ev.alpha, ev.beta, ev.gamma), t);
+  Gyro.orient(Gyro.fromEuler(ev.alpha, ev.beta, ev.gamma), t);
+  fed(t, n0);
+};
+const v3 = (o, a, b, c) => (o && o[a] != null && o[b] != null && o[c] != null ? [+o[a], +o[b], +o[c]] : null);
+In.onMotion = (ev) => {
+  In.mCount++;
+  const t = performance.now() / 1e3,
+    n0 = Gyro.st.nFeed,
+    w = v3(ev.rotationRate, 'beta', 'gamma', 'alpha'); // rotationRate alpha / beta / gamma are about device z / x / y
+  if (w) In.wCount++;
+  Gyro.motion(
+    w,
+    v3(ev.acceleration, 'x', 'y', 'z'),
+    v3(ev.accelerationIncludingGravity, 'x', 'y', 'z'),
+    t,
+  );
+  fed(t, n0);
 };
 Gyro.st.onGesture = (g) => In.push(g);
-addEventListener('deviceorientation', In.onOrient, true);
-addEventListener(
-  'devicemotion',
-  () => {
-    In.mCount++;
-  },
-  true,
-);
+In.listen = () => {
+  addEventListener('deviceorientation', In.onOrient, true);
+  addEventListener('devicemotion', In.onMotion, true);
+};
+In.listen();
 In.requestMotion = async () => {
   try {
     if (
@@ -70,6 +90,11 @@ In.requestMotion = async () => {
   } catch (e) {
     In.perm = 'denied';
   }
+  // iOS asks once for both, but the gyro and accelerometer stream has its own gate on some versions
+  try {
+    const DM = typeof DeviceMotionEvent !== 'undefined' ? DeviceMotionEvent : null;
+    if (In.perm === 'granted' && DM && typeof DM.requestPermission === 'function') await DM.requestPermission();
+  } catch (e) {}
 };
 
 // ---- shared -----------------------------------------------------------------------------------------------
@@ -105,6 +130,8 @@ const shape = (x) => {
 In.update = (dt, now, playing, cornerNear) => {
   const m = modeNow();
   Gyro.cfg.sens = S.sens;
+  Gyro.cfg.steer = S.steer;
+  Gyro.cfg.auto = S.auto;
   Gyro.cfg.invertLift = !!S.invertPitch;
   Gyro.cfg.invertDash = !!S.invertDash;
   Gyro.cfg.cornerNear = !!cornerNear;
