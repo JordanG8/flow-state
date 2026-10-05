@@ -9,8 +9,14 @@ Plain HTML/JS on top of three.js (loaded from a CDN). No build step: `src/` is d
 ## Controls
 
 **Phone (gyro)** works in any pose: standing, sitting, lying in bed. The first run asks you to *spin it*
-(twist left/right, then flick up/down) so the game learns the axes your wrist actually moves around. Slow rotation
-steers; a fast flick is a move, and every flick re-zeroes itself, so you never have to turn to face another direction.
+(twist left/right, then flick up/down) so the game learns the axes your wrist actually moves around.
+
+The phone is your eyes, like a VR headset you hold. Turning it slowly is looking: the view follows it 1:1 (predicted to
+the frame and tremor filtered, so it never trails your hand), and you run where you look. A fast flick is a move: the
+view does not tip, roll or swing with it, it only fires the move. Near a red corner, looking into the bend does not
+steer you off the path; keep looking into it and the run turns at the middle of the corner. The look folds into the
+turn's swing, so straight ahead is wherever the phone points afterwards, and bringing the phone back to your natural
+hold is not a steer. Every move re-zeroes itself, so you never have to turn to face another direction.
 
 Straight ahead is wherever you hold the phone, and it keeps up with you while you play. Wherever your hand comes to rest
 after a move becomes the new centre. If your arms sag or your body turns, the centre slowly follows, so you never have
@@ -24,8 +30,8 @@ and checks the gyro on phones that have no orientation sensor.
 
 | Move | Gesture |
 | --- | --- |
-| Steer | twist slowly |
-| Turn (red corners) | snap your wrist toward the bend and let it spring back |
+| Steer | look where you want to go (twist slowly) |
+| Turn (red corners) | look into the bend as you reach it, or snap your wrist toward it and let it spring back |
 | Leap | flick the top of the phone up |
 | Slide | flick down |
 | Dash | tilt sideways like a key in a lock |
@@ -68,6 +74,7 @@ src/
   game.js         renderer, camera, game loop, screens
 tests/gyro.test.js    numeric tests for the gesture engine and calibration
 tests/stance.test.js  the centre following a drifting stance, sloppy returns, gyro / orientation / accelerometer fusion
+tests/look.test.js    the view holding still through moves, 1:1 looks, running where you look, corners taken by looking
 tests/assist.test.js  aim assist through corners
 scripts/dev-server.py
 ```
@@ -76,7 +83,7 @@ scripts/dev-server.py
 
 ```
 npm run dev     # http://localhost:5173, no caching
-npm test        # gesture engine, stance + sensor fusion, calibration, aim assist tests
+npm test        # gesture engine, stance + sensor fusion, VR look + corners, calibration, aim assist tests
 ```
 
 Add `?debug` to the URL to expose `window.__fs` (game, input, gyro, audio analyser tap) for poking from the console.

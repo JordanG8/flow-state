@@ -877,7 +877,9 @@ const CORE = (() => {
     stepP: stepP,
     respawn: respawn,
     hv: hv,
+    mod4: mod4,
     clamp: clamp,
+    LATMAX: LATMAX,
   };
 })();
 

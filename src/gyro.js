@@ -19,7 +19,14 @@
 // comes to rest, wherever it rests is the new neutral. Between moves the neutral leaks toward the current pose: lift
 // and tilt straight away (they are only ever flicked), twist only once a lean has been held longer than any steer
 // needs (steering moves you sideways, nobody holds one for long). Coming back after holding a flick out is not a new
-// move: it only counts once it carries the phone past where the flick started.
+// move: it only counts once it carries the phone past where the flick started, and a slow way back brings the centre
+// with it.
+//
+// Look (the VR part): slow motion is looking, fast motion is a move. The look follows the phone 1:1 while it turns
+// slowly and freezes while it flicks, so a leap never tips the view and a snap never swings it. frame() turns the look
+// into the camera and the steer once per rendered frame: predicted to the frame time, tremor filtered, and you run
+// where you look. Near a corner, looking into the bend is getting ready to turn, not steering, and reaching the middle
+// of the corner while looking into it takes the turn.
 const Gyro = (() => {
   const R2D = 180 / Math.PI,
     D2R = Math.PI / 180,
@@ -69,13 +76,14 @@ const Gyro = (() => {
 
   const DEF_CAL = {t: [0, 1, 0], f: [1, 0, 0], d: [0, 0, 1], amp: 40, ok: false};
   // steer = steer gain (the game's), auto = how fast the neutral follows your stance (0 = only after moves)
-  const cfg = {sens: 1, steer: 1, auto: 1, invertLift: false, invertDash: false, cornerNear: false};
+  // corner = direction of a bend you are about to reach (0 = none): a lean toward it is not drift
+  const cfg = {sens: 1, steer: 1, auto: 1, invertLift: false, invertDash: false, cornerNear: false, corner: 0};
   const st = {
     cal: Object.assign({}, DEF_CAL),
     qn: null,
     qLast: null,
     ang: [0, 0, 0],
-    hist: [], // [t, q] for the last 0.4 s
+    hist: [], // [t, q, look] for the last 0.4 s
     speed: 0, // deg/s
     active: false,
     flick: null, // the move being resolved: {axis, sign, t0, tb, peak, still, rest, phase: out | back | home, pre}
@@ -83,10 +91,14 @@ const Gyro = (() => {
     hold: 0, // how long the twist has leaned the same way
     holdSign: 0,
     follow: 0, // deg/s the neutral is moving to follow your stance (gesture lab)
+    ret: null, // after a move held out: {axis, until}, the way back brings the centre along
+    look: [0, 0, 0], // what you are looking at, degrees from the neutral (twist, lift, tilt), moves taken out
+    lookW: [0, 0, 0], // how fast the look is turning, deg/s (frame prediction)
+    oe: [{}, {}, {}], // frame() tremor filter state
+    lookCorner: null, // the corner a look already turned you at
+    qPrev: null,
     lockUntil: 0,
     liftLock: 0,
-    holdUntil: 0,
-    holdVal: 0,
     lastT: 0,
     nFeed: 0,
     calS: null,
@@ -122,9 +134,14 @@ const Gyro = (() => {
     st.hist.length = 0;
     st.flick = null;
     st.home = null;
+    st.ret = null;
+    st.lookCorner = null;
     st.hold = 0;
-    st.holdUntil = 0;
     st.lockUntil = 0;
+    for (let i = 0; i < 3; i++) {
+      st.look[i] = st.lookW[i] = 0;
+      st.oe[i] = {};
+    }
   }
 
   // The move is over and the hand has stopped: wherever it rests is the new neutral.
@@ -142,10 +159,14 @@ const Gyro = (() => {
       st.home.until = t + (stayed ? 2.5 : 0.4);
       st.home.mag = t + 3;
     }
+    st.ret = stayed ? {axis: f.axis, until: t + 1.2} : null;
   }
 
-  const newFlick = (axis, sign, t, phase, peak, pre) => ({axis, sign, t0: t, tb: t, peak, still: 0, rest: 0, phase, pre});
-  function fire(i, sign, t, from) {
+  const newFlick = (axis, sign, t, phase, peak, pre, lk) => ({
+    axis, sign, t0: t, tb: t, peak, still: 0, rest: 0, phase, pre, lk, // lk = the look to hold the view at
+  });
+  // from = the pose the move started from, look = what you were looking at then (the view goes back to it)
+  function fire(i, sign, t, from, look) {
     let g;
     if (i === 0) g = {t: 'turn', dir: sign};
     else if (i === 1) {
@@ -158,12 +179,9 @@ const Gyro = (() => {
     const keep = st.flick && st.flick.axis === 0 && i !== 0;
     if (st.flick && !keep) finish(t, false);
     st.lockUntil = t + 0.14;
-    if (!keep) st.flick = newFlick(i, sign, t, 'out', Math.abs(st.ang[i]), offset(from)[0]);
+    if (!keep) st.flick = newFlick(i, sign, t, 'out', Math.abs(st.ang[i]), offset(from)[0], (look || st.look)[i]);
     st.home = {q: from, axis: i, until: Infinity, mag: Infinity};
-    if (i !== 0) {
-      st.holdUntil = t + 0.22;
-      st.holdVal = st.ang[0];
-    }
+    st.ret = null;
     if (st.onGesture) st.onGesture(g);
     return true;
   }
@@ -174,7 +192,7 @@ const Gyro = (() => {
   function track(a, dt, t) {
     // the hand drifted back to where it was before the last move: that is still the stance
     const hm = st.home;
-    if (hm && t < hm.mag && st.speed < 30) {
+    if (hm && t < hm.mag && st.speed < 10) {
       const ho = offset(hm.q),
         lh = vlen(ho);
       if (lh > 4 && vlen(vsub(a, ho)) < Math.max(3, 0.3 * lh)) {
@@ -186,16 +204,16 @@ const Gyro = (() => {
     const SR = steerRange() / Math.max(0.2, cfg.steer),
       dz = 0.135 * SR, // 1.5x the steer dead zone
       s = Math.sign(a[0]);
-    if (Math.abs(a[0]) <= dz || s !== st.holdSign) st.hold = 0;
+    if (Math.abs(a[0]) <= dz || s !== st.holdSign || s === cfg.corner) st.hold = 0;
     else st.hold += dt;
     st.holdSign = s;
     const body = tel.body,
       still = 1 - sstep((st.speed - 25) / (65 + 60 * body)), // only while the hand is quiet: moving it is input
       g = Math.max(0, cfg.auto) * still * (1 + 2 * body); // the whole body shifting: follow it faster
     if (g <= 0) return;
-    // twist: leftovers inside the dead zone go at once, a real lean only once it has been held longer than steering
-    // ever needs to
-    const lt = Math.abs(a[0]) <= dz ? 1.2 : 0.8 * sstep((st.hold - 1.2) / 1.6),
+    // twist: leftovers inside the dead zone go at once once the hand is really still (not while a look is starting), a
+    // real lean only once it has been held longer than steering ever needs to
+    const lt = Math.abs(a[0]) <= dz ? 1.2 * (1 - sstep((st.speed - 6) / 12)) : 0.8 * sstep((st.hold - 1.2) / 1.6),
       c = [lt, 1, 1].map((l, i) => a[i] * (1 - Math.exp(-l * g * dt)));
     st.follow = vlen(c) / dt;
     shift(c);
@@ -211,7 +229,7 @@ const Gyro = (() => {
     st.lastT = t;
     const a = (st.ang = offset(q));
     let h = st.hist;
-    h.push([t, q]);
+    h.push([t, q, st.look.slice()]);
     while (h.length && t - h[0][0] > 0.4) h.shift();
     let s0 = null;
     for (const x of h)
@@ -223,7 +241,12 @@ const Gyro = (() => {
       s0 && s0 !== h[h.length - 1] ? (vlen(rotvec(qmul(qconj(s0[1]), q))) * R2D) / Math.max(t - s0[0], 1e-3) : 0;
     if (st.calS) st.calS.trace.push([t, q]);
     st.follow = 0;
-    if (!st.active) return;
+    const dq = st.qPrev ? delta(st.qPrev, q) : [0, 0, 0]; // what the hand did since the last sample
+    st.qPrev = q;
+    if (!st.active) {
+      updLook(dq, dt);
+      return;
+    }
     const thr = thresholds();
     // Resolve the move in progress: out -> back -> at rest, or held out there (that is where the hand lives now).
     const f = st.flick;
@@ -247,6 +270,20 @@ const Gyro = (() => {
       if (st.flick === f && f.phase !== 'out' && (f.rest >= 0.05 || t - f.tb > (f.phase === 'home' ? 1 : 0.45)))
         finish(t, false);
     } else track(a, dt, t);
+    // a move was held out: slowly coming back toward where it started brings the centre along, it is not a look (a
+    // quick way back is a move of its own, and the home rule below deals with it)
+    const r = st.ret;
+    if (r && !st.flick && st.home && t < r.until) {
+      const i = r.axis,
+        ho = offset(st.home.q)[i];
+      if (dq[i] * ho > 0) {
+        const c = [0, 0, 0];
+        c[i] = Math.sign(dq[i]) * Math.min(Math.abs(dq[i]) * lookGate(vlen(dq) / dt), Math.abs(ho));
+        shift(c);
+        dq[i] -= c[i];
+      }
+    }
+    updLook(dq, dt);
     if (t < st.lockUntil) return;
     h = st.hist; // the swing back may have swapped the history
     let o = null;
@@ -280,11 +317,86 @@ const Gyro = (() => {
     if (hm && hm.axis === i && t < hm.until) {
       const ho = offset(hm.q)[i];
       if (Math.sign(ho) === sign && Math.abs(ho) > 0.4 * thr[i] && !passed(i, sign, thr)) {
-        if (!st.flick) st.flick = newFlick(i, sign, t, 'home', 0, a[0]);
+        if (!st.flick) st.flick = newFlick(i, sign, t, 'home', 0, a[0], o[2][i]);
         return;
       }
     }
-    fire(i, sign, t, o[1]);
+    fire(i, sign, t, o[1], o[2]);
+  }
+
+  // Slow motion is looking, fast motion is a move: the look follows the hand 1:1 while it turns slowly, freezes while
+  // it flicks, and settles back onto the hand once it is slow again. A move resolving on an axis owns that axis.
+  const lookGate = (w) => 1 - sstep((w - 60) / 100); // deg/s -> 1 looking .. 0 flicking
+  function updLook(dq, dt) {
+    const a = st.ang,
+      w = vlen(dq) / dt,
+      g = lookGate(w),
+      k = 1 - Math.exp(-12 * (1 - sstep((w - 25) / 50)) * dt),
+      f = st.flick;
+    for (let i = 0; i < 3; i++) {
+      const L0 = st.look[i];
+      if (f && f.axis === i) {
+        // the first instant of a flick looks like a look; once it is a move, the view goes back to before it
+        st.look[i] += (f.lk - L0) * (1 - Math.exp(-25 * dt));
+        st.lookW[i] = 0;
+        continue;
+      }
+      const L = L0 + dq[i] * g;
+      st.look[i] = L + (a[i] - L) * k;
+      st.lookW[i] += ((st.look[i] - L0) / dt - st.lookW[i]) * 0.5;
+    }
+  }
+  // one-euro filter: steady at rest (hand tremor), quick when the look actually moves
+  function euro(s, x, dt) {
+    if (s.x == null || !(dt > 0)) {
+      s.x = x;
+      s.dx = 0;
+      return x;
+    }
+    const al = (fc) => 1 / (1 + 1 / (2 * Math.PI * fc * dt));
+    s.dx += ((x - s.x) / dt - s.dx) * al(1);
+    s.x += (x - s.x) * al(1.5 + 0.25 * Math.abs(s.dx));
+    return s.x;
+  }
+  // A turn from looking: the stance it started from is home, like any move.
+  function lookTurn(dir, t) {
+    if (!st.active || !st.qn || (st.flick && st.flick.axis === 0)) return false;
+    return fire(0, dir, t, st.qn);
+  }
+  // The game just turned you 90 degrees: wherever you are looking now is straight down the new path. The caller folds
+  // the old look into the turn swing so the camera does not jump.
+  function turnApplied(t) {
+    if (!st.qn) return;
+    if (st.flick && st.flick.axis === 0) finish(t, true);
+    else shift([st.ang[0], 0, 0]);
+    st.look[0] = st.lookW[0] = 0;
+    st.oe[0] = {};
+  }
+  // Once per rendered frame: the camera look (degrees: yaw + left, pitch + up, roll) and the steer (-1 left .. 1 right).
+  // ctx: {gain, speed, latmax, corner: {id, dir, f, S, eta} for the next bend on this heading, or null}
+  function frame(t, dt, ctx) {
+    ctx = ctx || {};
+    const age = t - st.lastT,
+      // predict to the frame time, but no guessing ahead once the sensor has stalled
+      lead = st.lastT && age < 0.1 ? clamp(age, 0, 0.035) : 0,
+      v = [0, 0, 0];
+    for (let i = 0; i < 3; i++) v[i] = euro(st.oe[i], st.look[i] + st.lookW[i] * lead, dt);
+    const yaw = v[0] * (ctx.gain || 1),
+      c = ctx.corner;
+    let sy = st.flick && st.flick.axis === 0 ? 0 : yaw; // a turn resolving is not a steer
+    cfg.corner = c && c.eta < 1.5 ? c.dir : 0;
+    if (c) {
+      const toward = yaw * c.dir;
+      // looking into a bend you are about to reach: getting ready to turn, not moving sideways
+      if (toward > 0) sy *= 1 - sstep((1.1 - c.eta) / 0.5);
+      // still looking into it at the middle of the corner: that is the turn (the best moment for it, too)
+      if (toward >= 14 && c.f >= c.S / 2 - 1.6 && c.f < c.S - 0.5 && st.lookCorner !== c.id && lookTurn(c.dir, t))
+        st.lookCorner = c.id;
+    }
+    // you run where you look: the sideways speed that points your path along the view
+    const sp = Math.max(ctx.speed || 0, 15),
+      steer = clamp((-sp * Math.tan(clamp(sy, -80, 80) * D2R)) / (ctx.latmax || 9.5), -1, 1);
+    return {yaw: yaw, pitch: v[1], roll: v[2], steer: steer};
   }
 
   // ---- telemetry ------------------------------------------------------------------------------------------------
@@ -332,6 +444,7 @@ const Gyro = (() => {
     const J = qmul(q, qconj(st.qLast)),
       L = (x) => qmul(J, x);
     st.qn = L(st.qn);
+    if (st.qPrev) st.qPrev = L(st.qPrev);
     for (const h of st.hist) h[1] = L(h[1]);
     if (st.home) st.home.q = L(st.home.q);
     if (st.calS) for (const x of st.calS.trace) x[1] = L(x[1]);
@@ -411,11 +524,10 @@ const Gyro = (() => {
     feed(tel.qg, t);
   }
 
-  // Steering angle in degrees (+ = twisted left). Zero while a turn is resolving, held briefly after other flicks.
-  function steerDeg(t) {
+  // Steering look in degrees (+ = twisted left), unfiltered. Zero while a turn is resolving.
+  function steerDeg() {
     if (st.flick && st.flick.axis === 0) return 0;
-    if (t < st.holdUntil) return st.holdVal;
-    return st.ang[0];
+    return st.look[0];
   }
   function steerRange() {
     return clamp(st.cal.amp * 0.7, 12, 30);
@@ -556,6 +668,9 @@ const Gyro = (() => {
     motion: motion,
     resetTel: resetTel,
     neutral: neutral,
+    frame: frame,
+    lookTurn: lookTurn,
+    turnApplied: turnApplied,
     steerDeg: steerDeg,
     steerRange: steerRange,
     meters: meters,

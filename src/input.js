@@ -121,13 +121,20 @@ In.recenter = () => {
 };
 In.turnApplied = (dir) => {
   In.turnOff -= 90 * dir; // the world just rotated 90; swing the camera round to it
+  if (modeNow() === 'gyro') {
+    // where you were looking becomes part of that swing, and straight ahead is wherever the phone points now
+    In.turnOff += In.view.yaw * (game.third ? 0.6 : 1);
+    In.view.yaw = 0;
+    Gyro.turnApplied(performance.now() / 1e3);
+  }
 };
 const shape = (x) => {
   const a = Math.abs(x),
     dz = 0.09;
   return a < dz ? 0 : Math.sign(x) * Math.pow((a - dz) / (1 - dz), 1.2);
 };
-In.update = (dt, now, playing, cornerNear) => {
+// corner: the next bend on this heading, {id, dir, f, S, eta} (see stepGame), or null
+In.update = (dt, now, playing, cornerNear, corner) => {
   const m = modeNow();
   Gyro.cfg.sens = S.sens;
   Gyro.cfg.steer = S.steer;
@@ -140,13 +147,18 @@ In.update = (dt, now, playing, cornerNear) => {
   In.turnOff = damp(In.turnOff, 0, 14, dt);
   const V = In.view;
   if (m === 'gyro') {
-    const sd = Gyro.steerDeg(now),
-      SR = Gyro.steerRange() / S.steer;
-    In.steer = shape(clamp(-sd / SR, -1, 1));
-    const a = Gyro.st.ang;
-    V.yaw = damp(V.yaw, clamp(sd, -45, 45), 22, dt);
-    V.pitch = damp(V.pitch, clamp(a[1], -40, 50), 22, dt);
-    V.roll = damp(V.roll, clamp(a[2], -40, 40), 22, dt);
+    // The view is the phone (1:1, no smoothing beyond the tremor filter, so it never trails the hand) and you run
+    // where you look. A small wrist range from calibration gets a little more turn per degree.
+    const o = Gyro.frame(now, dt, {
+      gain: S.steer * clamp(25 / Gyro.steerRange(), 1, 2),
+      speed: game.P ? game.P.speed : 0,
+      latmax: CORE.LATMAX,
+      corner: playing ? corner : null,
+    });
+    In.steer = o.steer;
+    V.yaw = clamp(o.yaw, -60, 60);
+    V.pitch = clamp(o.pitch, -40, 50);
+    V.roll = clamp(o.roll, -40, 40);
     return;
   }
   const s = clamp((K.KeyD ? 1 : 0) - (K.KeyA ? 1 : 0) + (m === 'touch' ? In.ts : 0), -1, 1);

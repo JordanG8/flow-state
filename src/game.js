@@ -703,8 +703,17 @@ function updateHints(P) {
     jump: k ? 'Space: leap' : 'Flick up: leap',
     slide: k ? 'S: slide' : 'Flick down: slide',
     dash: k ? 'Z / C: dash' : 'Tilt: dash',
-    steer: k ? 'A / D: steer' : 'Rotate slowly: steer',
-    turn: best.h.dir > 0 ? (k ? 'Q: turn left' : 'Snap left') : k ? 'E: turn right' : 'Snap right',
+    steer: k ? 'A / D: steer' : m === 'gyro' ? 'Look where you want to go' : 'Rotate slowly: steer',
+    turn:
+      m === 'gyro'
+        ? 'Look ' + (best.h.dir > 0 ? 'left' : 'right') + ' into the bend'
+        : best.h.dir > 0
+          ? k
+            ? 'Q: turn left'
+            : 'Snap left'
+          : k
+            ? 'E: turn right'
+            : 'Snap right',
   };
   hintText(TX[t]);
 }
@@ -722,7 +731,19 @@ function stepGame(raw, now) {
     }
     return false;
   })();
-  In.update(raw, now, true, cn);
+  // the next bend on this heading: how far, which way, how soon (gyro: looking into it is how you take it)
+  const cc = (() => {
+    const h = CORE.hv(P.H);
+    for (let k = P.ci - 1; k <= P.ci + 1; k++) {
+      const ch = c.get(k),
+        co = ch && ch.corner;
+      if (!co || co.used || CORE.mod4(co.H) !== CORE.mod4(P.H)) continue;
+      const f = (P.x - co.tx) * h[0] + (P.z - co.tz) * h[1];
+      return {id: co, dir: co.dir, f: f, S: co.S, eta: -f / Math.max(P.speed, 1)};
+    }
+    return null;
+  })();
+  In.update(raw, now, true, cn, cc);
   if (game.lockT > 0) {
     game.lockT -= raw;
     In.gq.length = 0;
