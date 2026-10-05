@@ -5,6 +5,6 @@
   "description": "A parkour game you steer by rotating your phone",
   "scripts": {
     "dev": "python scripts/dev-server.py 5173",
-    "test": "node tests/gyro.test.js && node tests/stance.test.js && node tests/assist.test.js"
+    "test": "node tests/gyro.test.js && node tests/stance.test.js && node tests/look.test.js && node tests/assist.test.js"
   }
 }
