@@ -647,6 +647,30 @@ const A = (() => {
       musicBus.gain.setValueAtTime(0.55 * S.music * 0.15, t);
       musicBus.gain.linearRampToValueAtTime(0.55 * S.music, t + 1.6);
     },
+    // Arena: rifle shot (v scales with distance), reload clatter, hit confirm
+    shot(v) {
+      if (!ctx) return;
+      const t = T();
+      noise(t, 0.085, {type: 'lowpass', f: 4200, f2: 600, q: 0.7, g: 0.3 * v, a: 0.001, send: 0.12});
+      note(180, t, {f2: lo(52), a: 0.001, d: 0.085, g: 0.3 * v, bus: sfxBus});
+      note(980, t, {type: 'square', f2: 240, a: 0.001, d: 0.028, g: 0.045 * v, lp: 3200, bus: sfxBus});
+    },
+    reload() {
+      if (!ctx) return;
+      const t = T();
+      note(900, t + 0.3, {type: 'square', a: 0.001, d: 0.03, g: 0.05, lp: 2500, bus: sfxBus});
+      noise(t + 0.32, 0.06, {f: 1800, q: 2, g: 0.06});
+      note(620, t + 1.15, {type: 'square', a: 0.001, d: 0.04, g: 0.06, lp: 2500, bus: sfxBus});
+      noise(t + 1.17, 0.07, {f: 1200, q: 2, g: 0.08});
+      note(1300, t + 1.62, {type: 'square', a: 0.001, d: 0.03, g: 0.06, lp: 4000, bus: sfxBus});
+      note(240, t + 1.64, {f2: 120, a: 0.001, d: 0.06, g: 0.14, bus: sfxBus});
+    },
+    hitmark(head) {
+      if (!ctx) return;
+      const t = T();
+      note(head ? 2100 : 1500, t, {type: 'triangle', a: 0.001, d: 0.05, g: 0.1, lp: 6000, bus: sfxBus});
+      if (head) note(3150, t + 0.03, {type: 'triangle', a: 0.001, d: 0.09, g: 0.08, lp: 7000, bus: sfxBus});
+    },
     rise() {
       if (!ctx) return;
       noise(T(), 0.7, {f: 200, f2: 3500, q: 0.9, g: 0.08, lp: 4500, a: 0.5, send: 0.35});

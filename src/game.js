@@ -33,9 +33,11 @@ const U = {
   uFogDen: {value: 0.008},
   uBody: {value: new THREE.Vector4(0, 0, 0, 0)}, // cosmetic outfit tint (w = 1 when custom)
   uTrim: {value: new THREE.Vector4(0, 0, 0, 0)},
+  uAmb: {value: 0}, // flat fill light (the Arena lifts its shadows a little)
+  uThin: {value: 0}, // 1 = thin outlines, for small parts like the Arena soldiers
 };
 const VS = `attribute vec2 aSize;attribute vec3 aInfo;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; void main(){vec4 wp=modelMatrix*vec4(position,1.);vW=wp.xyz;vN=normalize(mat3(modelMatrix)*normal);vUv=uv;vSize=aSize;vInfo=aInfo;vec4 mv=viewMatrix*wp;vD=-mv.z;gl_Position=projectionMatrix*mv;}`;
-const FS = `precision highp float;uniform float uTime,uFogDen;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;uniform vec4 uBody,uTrim;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=.03+vD*.0007;float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} else if(kind>6.5&&kind<7.5){col=uLight*mix(lit,1.,.35);if(uBody.w>.5){col=uBody.rgb*lit;edgeC=mix(uInk,vec3(.93),step(dot(uBody.rgb,vec3(.33)),.22));}} else if(kind>7.5&&kind<8.5){if(uTrim.w>.5){col=uTrim.rgb*(.8+.2*lit);}else{float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);}} float fw=fwidth(ed);if(efade>0.){float lw=1.-smoothstep(edgeW,edgeW+fw*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade);} float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);gl_FragColor=vec4(col,1.);}`;
+const FS = `precision highp float;uniform float uTime,uFogDen,uAmb,uThin;uniform vec3 uCam,uSun,uLight,uFog,uAccent,uInk;uniform vec4 uBody,uTrim;varying vec3 vN,vW,vInfo;varying vec2 vUv,vSize;varying float vD; float h21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);} void main(){vec3 n=normalize(vN);float kind=vInfo.x,seed=vInfo.y,ex=vInfo.z;bool top=n.y>.5; float sunL=clamp(dot(n,normalize(uSun)),0.,1.);float lit=.40+.40*sunL+.20*(n.y*.5+.5);lit=mix(lit,floor(lit*5.+.5)/5.,.55);lit=mix(lit,1.,uAmb); vec3 col=uLight*lit; float ed=min(min(vUv.x*vSize.x,(1.-vUv.x)*vSize.x),min(vUv.y*vSize.y,(1.-vUv.y)*vSize.y)); if(!top&&n.y>-.5){float hh=vUv.y*vSize.y;col*=mix(.70,1.,smoothstep(0.,2.2,hh));} col*=mix(.94,1.,smoothstep(0.,.7,ed)); vec3 edgeC=uInk;float edgeW=(.03+vD*.0007)*mix(1.,.3,uThin);float efade=1.-smoothstep(35.,150.,vD);float noEdge=0.; if(kind>.5&&kind<1.5){float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);} else if(kind>1.5&&kind<2.5){if(top){float r=length((vUv-.5)*vSize);float ring=step(0.,sin(r*6.-uTime*7.));col=mix(vec3(.98),uAccent,ring);}else col=uAccent*lit;} else if(kind>2.5&&kind<3.5){col=mix(uLight*.93,uFog,.15)*lit*(.9+.1*seed);if(ex>.5)col=uAccent*(.7+.3*lit);edgeC=mix(uInk,uFog,.55);} else if(kind>3.5&&kind<4.5){col=mix(uAccent,vec3(1.),.25+.25*sin(uTime*4.+seed*9.));noEdge=1.;} else if(kind>5.5&&kind<6.5){if(top){float st=step(.5,fract(ed*.28-uTime*.7));col=mix(uLight,uAccent,st*.9);}} else if(kind>6.5&&kind<7.5){col=uLight*mix(lit,1.,.35);if(uBody.w>.5){col=uBody.rgb*lit;edgeC=mix(uInk,vec3(.93),step(dot(uBody.rgb,vec3(.33)),.22));}} else if(kind>8.5&&kind<9.5){if(!top&&n.y>-.5){float hh=vUv.y*vSize.y-ex;float band=step(1.1,hh)*step(hh,2.5);float st=step(.5,fract((vUv.x*vSize.x+hh)*.42));col=mix(col,uAccent*(.82+.18*lit),st*band);col=mix(col,uInk,band*step(hh,1.18)+band*step(2.42,hh));}} else if(kind>9.5&&kind<10.5){col=vec3(.2,.21,.24)*(.55+.75*lit);edgeC=vec3(.93,.92,.88);} else if(kind>7.5&&kind<8.5){if(uTrim.w>.5){col=uTrim.rgb*(.8+.2*lit);}else{float p=.88+.12*sin(uTime*3.+seed*6.28);col=uAccent*p*(.78+.22*lit);}} float fw=fwidth(ed);if(efade>0.){float lw=1.-smoothstep(edgeW,edgeW+fw*1.3+.004,ed);col=mix(col,edgeC,lw*(1.-noEdge)*efade);} float f=1.-exp(-pow(vD*uFogDen,1.6));float hf=smoothstep(-4.,-48.,vW.y-uCam.y);f=clamp(f+hf*.6*(1.-f),0.,1.); col=mix(col,uFog,f);gl_FragColor=vec4(col,1.);}`;
 const mainMat = new THREE.ShaderMaterial({
   uniforms: U,
   vertexShader: VS,
@@ -698,22 +700,23 @@ function updateHints(P) {
     } catch (e) {}
   }
   const m = modeNow(),
-    k = m === 'keys';
+    k = m === 'keys',
+    g = m === 'gyro';
   const TX = {
-    jump: k ? 'Space: leap' : 'Flick up: leap',
-    slide: k ? 'S: slide' : 'Flick down: slide',
-    dash: k ? 'Z / C: dash' : 'Tilt: dash',
-    steer: k ? 'A / D: steer' : m === 'gyro' ? 'Look where you want to go' : 'Rotate slowly: steer',
+    jump: k ? 'Space: leap' : g ? 'Flick up: leap' : 'Swipe up: leap',
+    slide: k ? 'S: slide' : g ? 'Flick down: slide' : 'Swipe down: slide',
+    dash: k ? 'Z / C: dash' : g ? 'Tilt: dash' : 'Double-tap a side: dash',
+    steer: k ? 'A / D: steer' : g ? 'Look where you want to go' : 'Drag: steer',
     turn:
       m === 'gyro'
         ? 'Look ' + (best.h.dir > 0 ? 'left' : 'right') + ' into the bend'
         : best.h.dir > 0
           ? k
             ? 'Q: turn left'
-            : 'Snap left'
+            : 'Swipe left'
           : k
             ? 'E: turn right'
-            : 'Snap right',
+            : 'Swipe right',
   };
   hintText(TX[t]);
 }
@@ -797,7 +800,7 @@ function stepGame(raw, now) {
   const mn = Math.floor(P.dist / 300);
   if (mn > game.mileN) {
     game.mileN = mn;
-    bigText(['Keep. Moving.', 'Flow. Flow. Flow.', 'Breathe.', 'No. Thoughts.', 'Just. Rotate.'][mn % 5]);
+    bigText(['Keep. Moving.', 'Flow. Flow. Flow.', 'Breathe.', 'No. Thoughts.', 'Just. Run.'][mn % 5]);
   }
   updateHints(P);
   el.dn.textContent = String(Math.floor(P.dist)).padStart(3, '0');
@@ -1014,6 +1017,7 @@ function leaveStudio() {
 }
 function render(now) {
   U.uTime.value = now;
+  U.uAmb.value = 0;
   const dpal = PAL[game.act],
     k = (0.8 / 60) * 60;
   const dc = (col, arr, r) => {
@@ -1056,7 +1060,7 @@ function render(now) {
 let lastT = performance.now() / 1e3;
 // Frame pacing. A 120 Hz phone would otherwise render 120 fps for a game simulated at 60. Anything that is not live
 // play (menus, pause, settings, locker) idles at 30. A skipped frame leaves lastT alone so game time stays exact.
-const FAST = {playing: 1, dead: 1, calib: 1};
+const FAST = {playing: 1, dead: 1, calib: 1, arena: 1};
 function frame() {
   requestAnimationFrame(frame);
   const now = performance.now() / 1e3;
@@ -1067,6 +1071,7 @@ function frame() {
   tickFrame(raw, now);
 }
 function tickFrame(raw, now) {
+  if (typeof Arena !== 'undefined' && Arena.tick(raw, now)) return; // the Arena draws its own frame
   game.flash = damp(game.flash, 0, 5, raw);
   game.red = damp(game.red, 0, 6, raw);
   const st = game.state;
@@ -1129,11 +1134,11 @@ function buildAttract() {
   game.attract = {s: 0, len: len, at: at, cx: p0[0], cy: p0[1], cz: p0[2], lx: p1[0], lz: p1[2]};
 }
 const TIPS = [
-  'Rotate. Do not tap.',
-  'Your wrist is the controller.',
-  'Look where you are going. Literally.',
+  'Swipe early. Corners buffer.',
+  'Arena: jump at a striped wall and keep running.',
+  'Look where you are going.',
   'Red kills. White holds.',
-  'Snap early. Corners buffer.',
+  'Wall jumps chain. Wall to wall to ledge.',
   'Breathe out on the landing.',
   'Rings in order play a melody.',
 ];
@@ -1225,11 +1230,7 @@ function toMenu(wiped) {
 function updMode() {
   const m = modeNow();
   $('#mn-mode').textContent =
-    m === 'gyro'
-      ? 'Input: gyro'
-      : isTouch
-        ? 'No motion sensor: swipe mode. Open in its own tab for gyro'
-        : 'Input: ' + (m === 'keys' ? 'keyboard + mouse' : m);
+    m === 'gyro' ? 'Input: gyro' : m === 'touch' ? 'Input: touch' : 'Input: ' + (m === 'keys' ? 'keyboard + mouse' : m);
 }
 function hud(on) {
   el.hud.classList.toggle('on', on);
@@ -1278,6 +1279,7 @@ document.addEventListener('click', (e) => {
   A.init();
   if (a === 'play' || a === 'restart') In.lock(); // inside the click, so the browser grants pointer lock
   if (a === 'play') startFlow();
+  else if (a === 'arena') Arena.openMenu();
   else if (a === 'locker') {
     prev = 'menu';
     game.state = 'locker';

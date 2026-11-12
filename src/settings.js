@@ -4,28 +4,30 @@
 const pct = (v) => Math.round(v * 100) + '%';
 const x2 = (v) => v.toFixed(2) + 'x';
 const CFG = [
-  {sec: 'Motion', only: 'touch'},
-  {k: 'sens', l: 'Snap sensitivity', h: 'Higher means a smaller flick triggers a move', min: 0.4, max: 2.5, st: 0.05, f: x2, only: 'touch'},
-  {k: 'steer', l: 'Steer gain', h: 'Higher means less twist to steer', min: 0.5, max: 2.5, st: 0.05, f: x2, only: 'touch'},
-  {k: 'auto', l: 'Auto-centre', h: 'Straight ahead follows the way you hold the phone, so you never have to shift your stance. 0 only re-centres after moves', min: 0, max: 2, st: 0.05, f: pct, only: 'touch'},
+  {sec: 'Motion', only: 'gyro'},
+  {sec: 'Touch', only: 'touch'},
+  {k: 'tsens', l: 'Look sensitivity', h: 'Arena: how far the view turns when you drag', min: 0.3, max: 3, st: 0.05, f: x2, only: 'touch'},
+  {k: 'sens', l: 'Snap sensitivity', h: 'Higher means a smaller flick triggers a move', min: 0.4, max: 2.5, st: 0.05, f: x2, only: 'gyro'},
+  {k: 'steer', l: 'Steer gain', h: 'Higher means less twist to steer', min: 0.5, max: 2.5, st: 0.05, f: x2, only: 'gyro'},
+  {k: 'auto', l: 'Auto-centre', h: 'Straight ahead follows the way you hold the phone, so you never have to shift your stance. 0 only re-centres after moves', min: 0, max: 2, st: 0.05, f: pct, only: 'gyro'},
   {k: 'assist', l: 'Aim assist', h: 'Keeps you on the path. Strongest for a quarter second after every turn', min: 0, max: 1, st: 0.05, f: pct, only: 'touch'},
-  {k: 'invertPitch', l: 'Invert up/down flick', t: 'tg', only: 'touch'},
-  {k: 'invertDash', l: 'Invert dash tilt', t: 'tg', only: 'touch'},
-  {calib: 1, only: 'touch'},
+  {k: 'invertPitch', l: 'Invert up/down flick', t: 'tg', only: 'gyro'},
+  {k: 'invertDash', l: 'Invert dash tilt', t: 'tg', only: 'gyro'},
+  {calib: 1, only: 'gyro'},
   {
     k: 'mode',
     l: 'Input',
     t: 'seg',
     o: [
       ['auto', 'Auto'],
-      ['gyro', 'Gyro'],
+      ...(GYRO_ON ? [['gyro', 'Gyro']] : []),
       ['touch', 'Touch'],
       ['keys', 'Keys'],
     ],
     only: 'touch',
   },
-  {sensor: 1, only: 'touch'},
-  {lab: 1, only: 'touch'},
+  {sensor: 1, only: 'gyro'},
+  {lab: 1, only: 'gyro'},
   {sec: 'Mouse', only: 'desktop'},
   {k: 'msens', l: 'Mouse sensitivity', h: 'Look speed while the mouse is locked', min: 0.1, max: 4, st: 0.05, f: x2, only: 'desktop'},
   {k: 'invertY', l: 'Invert mouse Y', t: 'tg', only: 'desktop'},
@@ -94,7 +96,8 @@ const CFG = [
   {sec: 'Other'},
   {reset: 1},
 ];
-const showCfg = (c) => !c.only || (c.only === 'touch' ? isTouch : !isMobile);
+// 'gyro' rows only exist while motion control is switched on (GYRO_ON in input.js)
+const showCfg = (c) => !c.only || (c.only === 'gyro' ? GYRO_ON && isTouch : c.only === 'touch' ? isTouch : !isMobile);
 
 // What a control does when it changes, beyond writing S[k].
 function applySetting(k) {
@@ -276,7 +279,7 @@ function buildSettings() {
         game.applyView();
       };
       root.appendChild(b);
-      if (isTouch) {
+      if (isTouch && GYRO_ON) {
         const r = document.createElement('button');
         r.className = 'btn alt';
         r.style.marginLeft = '10px';

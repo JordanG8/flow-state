@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>FLOW STATE</title><meta name=viewport content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'><meta name=theme-color content=#ecebe6><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' rel=stylesheet><link rel=stylesheet href=style.css><link rel=stylesheet href=ui.css></head><body>
+<!DOCTYPE html><html lang=en><head><meta charset=utf-8><title>FLOW STATE</title><meta name=viewport content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'><meta name=theme-color content=#ecebe6><link rel=preconnect href=https://fonts.googleapis.com><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link href='https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@800;900&family=JetBrains+Mono:wght@400;500;700&display=swap' rel=stylesheet><link rel=stylesheet href=style.css><link rel=stylesheet href=ui.css><link rel=stylesheet href=arena.css></head><body>
 <canvas id=gl></canvas>
 <div id=fxr></div><div id=fxf></div>
 <div id=hud>
@@ -13,7 +13,7 @@
 </div>
 <section id=loader class='scr on'>
   <i class='reg a'></i><i class='reg b'></i>
-  <header class='ld-top mono'><span>Flow/State</span><span class=hide-s>A parkour you steer by rotating</span><span>Build 0.9</span></header>
+  <header class='ld-top mono'><span>Flow/State</span><span class=hide-s>Run the course. Fight the arena.</span><span>Build 0.9</span></header>
   <div class=ld-mid>
     <h1 class=ld-title aria-label='Flow State'><span class=ln id=t1></span><span class=ln id=t2></span></h1>
     <div class=ld-bar><i id=ld-fill></i></div>
@@ -24,15 +24,18 @@
 <section id=menu class=scr>
   <div class='mn-top mono'><span>Flow/State</span><span id=mn-best>Best 0 m</span></div>
   <div class=mn-main>
-    <p class='mn-kicker mono'>Rotate to move. Nothing else.</p>
+    <p class='mn-kicker mono'>Two ways to move. Pick one.</p>
     <h1 class='mn-title glitch'><span>Flow</span><span>State<i>.</i></span></h1>
-    <nav class=mn-list>
-      <button class=main data-a=play>Start run</button>
+    <nav class=mn-modes aria-label='Game modes'>
+      <button class='mode hot' data-a=arena><small class=mono>New / online / 2 to 8 players</small><b>Arena</b><span class=mono>Peer-to-peer shooter. One rifle. Wall runs.</span></button>
+      <button class=mode data-a=play><small class=mono>Solo</small><b>Run</b><span class=mono>The endless course. Beat your distance.</span></button>
+    </nav>
+    <nav class=mn-sub>
       <button data-a=locker>Locker<em id=mn-new></em></button>
       <button data-a=how>How to move</button>
       <button data-a=settings>Settings</button>
     </nav>
-    <div class='mn-bot mono'><span id=mn-mode>Input: auto</span><span>Hold the phone upright</span></div>
+    <div class='mn-bot mono'><span id=mn-mode>Input: auto</span><span>Landscape plays best</span></div>
   </div>
 </section>
 <section id=settings class='scr panel'>
@@ -52,14 +55,15 @@
 <section id=how class='scr panel'>
   <div class=pn-head><h2>How to move</h2><button class=back data-a=back>Back</button></div>
   <div class=pn-body>
-    <p class='mono how-p'>Hold the phone however you like: standing, sitting, lying in bed. You run on your own. The phone is your eyes: turn it slowly and you look, and you run where you look. A fast flick is a move, and it never moves the view. Every move resets itself, so you never have to turn around.</p>
+    <p class='mono how-p'>Run: you run on your own. On a phone, drag to steer and swipe to move. A swipe is buffered, so make it early.</p>
     <div class=cards>
-      <div class=card><div class='ico turn'><i class=ph></i></div><h3>Turn</h3><p>Corners are painted red. Look into the bend as you reach it and you take it. Or snap your wrist toward it and let it spring back; a snap is buffered.</p></div>
-      <div class=card><div class='ico leap'><i class=ph></i></div><h3>Leap</h3><p>Flick the top of the phone up and back. Clears gaps, steps and red hurdles. Rings in the air build flow.</p></div>
-      <div class=card><div class='ico slide'><i class=ph></i></div><h3>Slide</h3><p>Flick down. Slides under red bars. In the air it dives you to the floor and into a slide.</p></div>
-      <div class=card><div class='ico dash'><i class=ph></i></div><h3>Dash</h3><p>Tilt the phone sideways like a key in a lock. A short sideways burst for zig-zags.</p></div>
+      <div class=card><div class='ico turn'><i class=ph></i></div><h3>Turn</h3><p>Corners are painted red. Swipe left or right as you reach one. Keyboard: Q and E.</p></div>
+      <div class=card><div class='ico leap'><i class=ph></i></div><h3>Leap</h3><p>Swipe up. Clears gaps, steps and red hurdles. Rings in the air build flow. Keyboard: Space.</p></div>
+      <div class=card><div class='ico slide'><i class=ph></i></div><h3>Slide</h3><p>Swipe down. Slides under red bars. In the air it dives you to the floor and into a slide. Keyboard: S.</p></div>
+      <div class=card><div class='ico dash'><i class=ph></i></div><h3>Dash</h3><p>Tap twice on the left or right half of the screen. A short sideways burst for zig-zags. Keyboard: Z and C.</p></div>
     </div>
-    <p class='mono how-p'>Red kills. White holds you. Time slows when you snap. Fly through rings in order and the music climbs the scale with you. Keyboard: A/D steer, Q/E turn, W or Space leap, S slide, Z/C dash, V camera. Mouse looks around, left click leaps, right click slides, Esc pauses. Touch: drag steers, swipe moves.</p>
+    <p class='mono how-p'>Red kills. White holds you. Time slows when you turn. Fly through rings in order and the music climbs the scale with you. Keyboard: A/D steer, V camera. Mouse looks around, left click leaps, right click slides, Esc pauses.</p>
+    <p class='mono how-p'>Arena: left thumb moves, right thumb looks, and the Fire button also drags the view so you can track while shooting. Keyboard: WASD, mouse, click to fire, Space jump, R reload, V camera, Tab scores. Jump at any tall wall while moving along it and you run on it; jump again to kick off. The striped walls are the only way over the drop.</p>
   </div>
 </section>
 <section id=calib class=scr>
@@ -75,6 +79,59 @@
   <div class=stack><button class='btn rd' data-a=resume >Resume</button><button class='btn alt' data-a=restart>Restart run</button><button class='btn alt' data-a=settings>Settings</button><button class='btn alt' id=pz-recal data-a=recal>Recalibrate wrist</button><button class='btn alt' data-a=menu>Quit to menu</button></div>
   <div class=quick id=pz-quick></div>
 </section>
+<section id=mp class='scr panel'>
+  <div class=pn-head><h2>Arena</h2><button class=back data-ar=mp-back>Back</button></div>
+  <div class=am-body>
+    <p class='mono am-kick'>Peer-to-peer deathmatch / 2 to 8 players / one rifle / map: Switchback</p>
+    <label class=am-name><span class=mono>Callsign</span><input id=am-name maxlength=12 autocomplete=off autocapitalize=off spellcheck=false placeholder=Player aria-label=Callsign></label>
+    <div class=am-cols>
+      <div class=am-card><span class='mono am-n'>01</span><h3>Host</h3><p class=mono>Open a lobby, set the rules, share the code.</p><button class='btn rd' data-ar=host>Create lobby</button></div>
+      <div class=am-card><span class='mono am-n'>02</span><h3>Join</h3><p class=mono>Type the six letters a friend gave you.</p><div class=am-code><input id=am-code maxlength=6 inputmode=text autocapitalize=characters autocomplete=off spellcheck=false placeholder=ABCDEF aria-label='Lobby code'><button class=btn data-ar=join>Join</button></div></div>
+    </div>
+    <p class='mono am-status' id=am-status role=status></p>
+  </div>
+</section>
+<section id=lobby class='scr lobby'>
+  <div class=lb-panel>
+    <div class=pn-head><h2>Lobby</h2><button class=back data-ar=leave>Leave</button></div>
+    <div class=lb-codebox><span class=mono>Lobby code</span><b id=lb-code>------</b><button class='btn alt' data-ar=copy>Copy</button></div>
+    <div class='lb-sec mono'><span>Players</span><span id=lb-n></span></div>
+    <ul id=lb-players></ul>
+    <div class='lb-sec mono'><span>Match rules</span><span id=lb-who></span></div>
+    <div id=lb-rules></div>
+    <div class=lb-foot><button class='btn rd' id=lb-start data-ar=start>Start match</button><p class=mono id=lb-note></p></div>
+  </div>
+</section>
+<section id=apause class=scr>
+  <h2 class=cal-t id=ap-title>Menu.</h2>
+  <div class=stack><button class='btn rd' data-ar=resume>Back to the fight</button><button class='btn alt' data-ar=leave>Leave match</button></div>
+  <p class='mono ap-note'>The match keeps running while this is open.</p>
+</section>
+<section id=aend class=scr>
+  <p class='mono' id=ae-sub></p>
+  <h2 class=cal-t id=ae-title>Time.</h2>
+  <div class=ah-table id=ae-board></div>
+  <div class=stack><button class='btn rd' id=ae-again data-ar=again>Back to lobby</button><button class='btn alt' data-ar=leave>Leave</button></div>
+  <p class=mono id=ae-note></p>
+</section>
+<div id=ahud>
+  <div id=ah-score><b id=ah-k>00</b><i>/ <span id=ah-kt>15</span></i><span class=mono id=ah-time></span></div>
+  <div id=ah-btns><button id=ah-sb class=mono>Scores</button><button id=ah-view aria-label='Switch camera'><i></i></button><button id=ah-pause aria-label=Menu><span></span><span></span></button></div>
+  <div id=ah-feed></div>
+  <div id=ah-xh aria-hidden=true><b></b><b></b><b></b><b></b><i></i><em></em></div>
+  <div id=ah-big><span id=ah-bigs></span></div>
+  <div id=ah-hp><span class=mono>Health</span><b id=ah-hpn>100</b><div class=bar><i id=ah-hpf></i></div></div>
+  <div id=ah-ammo><b id=ah-am>30</b><span class=mono>AR-9 / 30</span></div>
+  <div id=ah-death><p class=mono id=ah-dtag>Kill replay</p><h3 id=ah-dby></h3><p class=mono id=ah-dcd></p><div class=bar><i id=ah-dbf></i></div></div>
+  <div id=ah-board class=ah-table></div>
+  <div id=ah-touch>
+    <div id=at-move><i id=at-base><b id=at-nub></b></i></div>
+    <div id=at-look></div>
+    <button id=at-rel class=mono aria-label=Reload>Reload</button>
+    <button id=at-jump class=mono aria-label=Jump>Jump</button>
+    <button id=at-fire class=mono aria-label=Fire>Fire</button>
+  </div>
+</div>
 <canvas id=fxm></canvas>
 <div id=wipe></div>
 <script src='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js'></script>
@@ -89,5 +146,9 @@
 <script src='settings.js'></script>
 <script src='locker.js'></script>
 <script src='game.js'></script>
+<script src='arena-core.js'></script>
+<script src='net.js'></script>
+<script src='rifle.js'></script>
+<script src='arena.js'></script>
 </body>
 </html>
