@@ -24,8 +24,16 @@ const In = {
   raw: [0, 0, 0],
   evTimes: [],
 };
+// Motion control is switched off: phones play by touch. The gyro engine (gyro.js), the wrist calibration
+// (calib.js) and their tests all stay in the repository; set GYRO_ON to true to bring the mode back.
+const GYRO_ON = false;
 // Gyro only drives the game on touch devices; a laptop's tilt sensor must not hijack desktop play.
-const modeNow = () => (S.mode === 'auto' ? (In.got && isTouch ? 'gyro' : isTouch ? 'touch' : 'keys') : S.mode);
+// A laptop with a touchscreen still has a mouse as its main pointer: that is a keyboard-and-mouse machine.
+const touchFirst = isTouch && !matchMedia('(pointer:fine)').matches;
+const modeNow = () => {
+  if (!GYRO_ON) return S.mode === 'keys' || (S.mode !== 'touch' && !touchFirst) ? 'keys' : 'touch';
+  return S.mode === 'auto' ? (In.got && isTouch ? 'gyro' : isTouch ? 'touch' : 'keys') : S.mode;
+};
 
 // ---- gyro -------------------------------------------------------------------------------------------------
 try {
@@ -75,11 +83,13 @@ In.onMotion = (ev) => {
 };
 Gyro.st.onGesture = (g) => In.push(g);
 In.listen = () => {
+  if (!GYRO_ON) return; // no sensor listeners at all, so the browser never wakes the motion hardware
   addEventListener('deviceorientation', In.onOrient, true);
   addEventListener('devicemotion', In.onMotion, true);
 };
 In.listen();
 In.requestMotion = async () => {
+  if (!GYRO_ON) return; // never ask for motion permission
   try {
     if (
       typeof DeviceOrientationEvent !== 'undefined' &&
@@ -263,6 +273,7 @@ addEventListener('contextmenu', (e) => e.preventDefault());
     sy = 0,
     st = 0,
     down = false;
+  const lastTap = {side: 0, t: 0};
   const cv = $('#gl');
   cv.addEventListener('pointerdown', (e) => {
     down = true;
@@ -280,9 +291,21 @@ addEventListener('contextmenu', (e) => e.preventDefault());
     const dx = e.clientX - sx,
       dy = e.clientY - sy,
       dt = performance.now() - st;
-    if (modeNow() === 'touch' && dt < 450 && Math.hypot(dx, dy) > 28) {
+    if (modeNow() !== 'touch') return;
+    if (dt < 450 && Math.hypot(dx, dy) > 28) {
       if (Math.abs(dx) > Math.abs(dy)) act({t: 'turn', dir: dx < 0 ? 1 : -1});
       else act({t: dy < 0 ? 'jump' : 'slide'});
+    } else if (dt < 240 && Math.hypot(dx, dy) < 14) {
+      // two quick taps on one side of the screen: dash that way
+      const side = e.clientX < innerWidth / 2 ? -1 : 1,
+        n = performance.now();
+      if (lastTap.side === side && n - lastTap.t < 320) {
+        act({t: 'dash', dir: side});
+        lastTap.t = 0;
+      } else {
+        lastTap.side = side;
+        lastTap.t = n;
+      }
     }
   };
   cv.addEventListener('pointerup', up);

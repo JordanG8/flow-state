@@ -23,6 +23,7 @@ const DEF = {
   auto: 1, // gyro auto-centre: how fast the neutral follows the way you hold the phone (0 = only after moves)
   invertDash: false,
   mode: 'auto',
+  tsens: 1, // touch look sensitivity (Arena)
   msens: 1, // mouse look sensitivity
   invertY: false,
   lockMouse: true,
