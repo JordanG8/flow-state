@@ -1,43 +1,55 @@
 'use strict';
-// Net: lobbies and the peer-to-peer link for the Arena.
-// Topology is a star: every joiner holds one WebRTC connection to the host, and the host relays. The lobby API
-// (/api/lobby, backed by Vercel Blob) is only used for the handshake; once the data channels are open nothing
-// goes through a server. Each link has a reliable channel (events) and an unreliable one (positions, shots).
+// Net: lobbies and the link for the Arena.
+// Topology is a star: the host's browser runs the match and every player has one WebSocket to the relay server
+// (server/relay.js), which forwards bytes between the host and its joiners. The relay URL comes from
+// window.FLOW_RELAY (src/config.js); empty means the same origin at /relay.
 const Net = (() => {
-  const ICE = [{urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']}, {urls: 'stun:stun.cloudflare.com:3478'}];
   const MAXP = 8;
-  const st = {role: null, code: '', key: '', id: -1, name: '', roster: [], peers: [], host: null, nextId: 1, seen: {}, pollMs: 2000, t0: 0, gen: 0};
+  const st = {role: null, code: '', key: '', id: -1, name: '', roster: [], peers: [], host: null, nextId: 1, ws: null, byP: {}, t0: 0, gen: 0};
   const on = {msg() {}, roster() {}, joined() {}, closed() {}};
   let timers = [];
   const nowS = () => performance.now() / 1e3;
   const cleanName = (n) => String(n || '').replace(/[^\w \-.]/g, '').trim().slice(0, 12) || 'Player';
 
-  async function api(body, keepalive) {
-    let r;
-    try {
-      r = await fetch('/api/lobby', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body), keepalive: !!keepalive});
-    } catch (e) {
-      throw new Error('Cannot reach the lobby service');
-    }
-    let j = null;
-    try {
-      j = await r.json();
-    } catch (e) {}
-    if (!r.ok) throw new Error((j && j.error) || 'Lobby service error (' + r.status + ')');
-    return j;
+  function relayUrl(q) {
+    let base = (typeof window !== 'undefined' && window.FLOW_RELAY) || '';
+    if (!base) base = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/relay';
+    return base + '?' + q;
   }
-  // Wait until the browser has collected its network candidates, so one message carries the whole description.
-  const gathered = (pc) =>
-    new Promise((res) => {
-      if (pc.iceGatheringState === 'complete') return res();
-      const t = setTimeout(res, 2500);
-      pc.addEventListener('icegatheringstatechange', () => {
-        if (pc.iceGatheringState === 'complete') {
-          clearTimeout(t);
-          res();
-        }
-      });
+  // Open a socket to the relay and resolve once it is open (or reject with a readable reason).
+  const connect = (q, gen) =>
+    new Promise((res, rej) => {
+      let ws;
+      try {
+        ws = new WebSocket(relayUrl(q));
+      } catch (e) {
+        return rej(new Error('Cannot reach the game server'));
+      }
+      const t = setTimeout(() => {
+        try {
+          ws.close();
+        } catch (e) {}
+        rej(new Error('Cannot reach the game server'));
+      }, 10000);
+      // frames that arrive before the caller installs its handler are kept, not lost
+      ws._q = [];
+      ws.onmessage = (ev) => ws._q.push(ev);
+      ws.onopen = () => {
+        clearTimeout(t);
+        res(ws);
+      };
+      ws.onclose = (e) => {
+        clearTimeout(t);
+        ws._closed = e;
+        rej(new Error(e.reason || 'Cannot reach the game server'));
+      };
     });
+  const listen = (ws, fn) => {
+    ws.onmessage = fn;
+    for (const ev of ws._q.splice(0)) fn(ev);
+  };
+  // A channel-shaped wrapper, so the message code below does not care what carries the bytes.
+  const chan = (raw) => ({readyState: 'open', bufferedAmount: 0, send: raw});
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const tx = (ch, s) => {
     if (ch && ch.readyState === 'open')
@@ -52,15 +64,13 @@ const Net = (() => {
     st.gen++;
     for (const t of timers) clearInterval(t);
     timers = [];
-    for (const p of st.peers)
+    if (st.ws) {
+      st.ws.onclose = st.ws.onmessage = null;
       try {
-        p.pc.close();
+        st.ws.close();
       } catch (e) {}
-    if (st.host)
-      try {
-        st.host.pc.close();
-      } catch (e) {}
-    Object.assign(st, {role: null, code: '', key: '', id: -1, roster: [], peers: [], host: null, nextId: 1, seen: {}, pollMs: 2000});
+    }
+    Object.assign(st, {role: null, code: '', key: '', id: -1, roster: [], peers: [], host: null, nextId: 1, ws: null, byP: {}});
   }
   function closed(why) {
     if (!st.role) return;
@@ -72,11 +82,48 @@ const Net = (() => {
   async function host(name) {
     reset();
     const gen = st.gen;
-    const r = await api({op: 'create'});
+    const ws = await connect('host=1', gen);
+    if (gen !== st.gen) {
+      ws.close();
+      return null;
+    }
+    const code = await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('The game server did not create a lobby')), 8000);
+      listen(ws, (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m._created) {
+            clearTimeout(t);
+            res(m._created);
+          }
+        } catch (e) {}
+      });
+      ws.onclose = (e) => {
+        clearTimeout(t);
+        rej(new Error(e.reason || 'The game server closed the connection'));
+      };
+    });
     if (gen !== st.gen) return null;
-    Object.assign(st, {role: 'host', code: r.code, key: r.key, id: 0, name: cleanName(name), t0: nowS()});
+    Object.assign(st, {role: 'host', code, id: 0, name: cleanName(name), t0: nowS(), ws});
     st.roster = [{id: 0, name: st.name}];
-    pollLoop(gen);
+    listen(ws, (ev) => {
+      let m;
+      try {
+        m = JSON.parse(ev.data);
+      } catch (e) {
+        return;
+      }
+      if (m._p == null) return;
+      if (m.ev === 'open') accept(m._p);
+      else if (m.ev === 'close') {
+        const p = st.byP[m._p];
+        if (p) drop(p);
+      } else if (typeof m.d === 'string') {
+        const p = st.byP[m._p];
+        if (p) hostRecv(p, m.d, false);
+      }
+    });
+    ws.onclose = () => closed('Lost the connection to the game server');
     timers.push(
       setInterval(() => {
         const t = nowS();
@@ -88,53 +135,20 @@ const Net = (() => {
       }, 2500),
     );
     on.roster();
-    return r.code;
+    return code;
   }
-  async function pollLoop(gen) {
-    while (gen === st.gen && st.role === 'host') {
-      try {
-        const r = await api({op: 'poll', code: st.code, key: st.key});
-        if (gen !== st.gen) return;
-        for (const o of r.offers)
-          if (!st.seen[o.peer]) {
-            st.seen[o.peer] = 1;
-            accept(o.peer, o.sdp, gen).catch((e) => console.warn('accept', e));
-          }
-      } catch (e) {
-        if (/No lobby/.test(e.message)) return; // expired: people already connected keep playing
-      }
-      // an idle lobby polls more slowly
-      await wait(Math.max(st.pollMs, nowS() - st.t0 > 600 ? 5000 : 0));
-    }
-  }
-  async function accept(peer, sdp, gen) {
+  function accept(rp) {
     if (st.peers.length >= MAXP - 1) return;
-    const pc = new RTCPeerConnection({iceServers: ICE});
-    const p = {pc, id: st.nextId++, name: '', r: null, u: null, ready: false, last: nowS(), born: nowS()};
+    const ch = chan((s) => st.ws.send(JSON.stringify({_to: rp, d: s})));
+    const p = {rp, id: st.nextId++, name: '', r: ch, u: ch, ready: false, last: nowS(), born: nowS()};
     st.peers.push(p);
-    pc.ondatachannel = (e) => {
-      const ch = e.channel;
-      if (ch.label === 'r') p.r = ch;
-      else p.u = ch;
-      ch.onmessage = (ev) => hostRecv(p, ev.data, ch.label === 'u');
-      if (ch.label === 'r') ch.onclose = () => drop(p);
-    };
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') drop(p);
-    };
-    await pc.setRemoteDescription({type: 'offer', sdp});
-    await pc.setLocalDescription(await pc.createAnswer());
-    await gathered(pc);
-    if (gen !== st.gen) return;
-    await api({op: 'answer', code: st.code, key: st.key, peer, sdp: pc.localDescription.sdp});
+    st.byP[rp] = p;
   }
   function drop(p) {
     const i = st.peers.indexOf(p);
     if (i < 0) return;
     st.peers.splice(i, 1);
-    try {
-      p.pc.close();
-    } catch (e) {}
+    delete st.byP[p.rp];
     if (!p.ready) return;
     st.roster = st.roster.filter((r) => r.id !== p.id);
     sendRoster();
@@ -187,60 +201,26 @@ const Net = (() => {
     const dead = () => gen !== st.gen;
     code = String(code || '').toUpperCase();
     if (!/^[A-Z]{6}$/.test(code)) throw new Error('A lobby code is six letters');
-    if (typeof RTCPeerConnection === 'undefined') throw new Error('This browser cannot make peer-to-peer connections');
-    const peer = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join('') + 'x';
-    const pc = new RTCPeerConnection({iceServers: ICE});
-    const h = {pc, r: pc.createDataChannel('r'), u: pc.createDataChannel('u', {ordered: false, maxRetransmits: 0}), last: nowS()};
-    const fail = (msg) => {
-      try {
-        pc.close();
-      } catch (e) {}
-      throw new Error(msg);
-    };
-    await pc.setLocalDescription(await pc.createOffer());
-    await gathered(pc);
-    try {
-      await api({op: 'offer', code, peer, sdp: pc.localDescription.sdp});
-    } catch (e) {
-      fail(e.message);
+    const ws = await connect('code=' + code, gen);
+    if (dead()) {
+      ws.close();
+      throw new Error('Cancelled');
     }
-    let ans = null;
-    for (let i = 0; i < 22 && !ans; i++) {
-      await wait(i < 4 ? 900 : 1500);
-      if (dead()) fail('Cancelled');
-      try {
-        ans = (await api({op: 'wait', code, peer})).sdp;
-      } catch (e) {
-        fail(e.message);
-      }
-    }
-    if (!ans) fail('The host did not answer. The lobby may be full, or its host has gone.');
-    await pc.setRemoteDescription({type: 'answer', sdp: ans});
-    const opened = await new Promise((res) => {
-      if (h.r.readyState === 'open') return res(true);
-      const t = setTimeout(() => res(false), 15000);
-      h.r.onopen = () => {
-        clearTimeout(t);
-        res(true);
-      };
-      pc.addEventListener('connectionstatechange', () => {
-        if (pc.connectionState === 'failed') {
-          clearTimeout(t);
-          res(false);
-        }
-      });
-    });
-    if (dead()) fail('Cancelled');
-    if (!opened) fail('Could not connect to the host directly. One of the two networks blocks peer-to-peer traffic.');
-    Object.assign(st, {role: 'client', code, name: cleanName(name), host: h});
+    const ch = chan((s) => ws.send(s));
+    const h = {r: ch, u: ch, last: nowS()};
+    Object.assign(st, {role: 'client', code, name: cleanName(name), host: h, ws});
+    let refused = ws._closed && ws._closed.reason; // e.g. 'No lobby with that code', sent as the socket closes
+    let settle = null;
     const welcomed = new Promise((res) => {
       const t = setTimeout(() => res(false), 8000);
+      settle = res;
       h.onWel = () => {
         clearTimeout(t);
         res(true);
       };
+      if (ws._closed) res(false);
     });
-    const recv = (ev) => {
+    listen(ws, (ev) => {
       let m;
       try {
         m = JSON.parse(ev.data);
@@ -260,17 +240,17 @@ const Net = (() => {
         on.roster();
       } else if (m.t === '_bye') closed('The host closed the lobby');
       else on.msg(m);
+    });
+    ws.onclose = (e) => {
+      if (st.id < 0) {
+        refused = e.reason;
+        settle(false);
+      } else closed(e.reason || 'Lost the connection to the host');
     };
-    h.r.onmessage = recv;
-    h.u.onmessage = recv;
-    h.r.onclose = () => closed('Lost the connection to the host');
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') closed('Lost the connection to the host');
-    };
-    tx(h.r, JSON.stringify({t: '_hi', n: st.name}));
+    tx(ch, JSON.stringify({t: '_hi', n: st.name}));
     if (!(await welcomed)) {
       reset();
-      throw new Error('The host did not respond');
+      throw new Error(refused || 'The host did not respond');
     }
     timers.push(
       setInterval(() => {
@@ -286,24 +266,22 @@ const Net = (() => {
   function send(m, unrel) {
     if (!st.role) return;
     if (st.role === 'client') {
-      const ch = unrel ? st.host.u : st.host.r;
-      if (unrel && ch.bufferedAmount > 32768) return;
-      tx(ch, JSON.stringify(m));
+      // positions and shots are disposable: skip them while the socket is backed up rather than queue them
+      if (unrel && st.ws.bufferedAmount > 32768) return;
+      tx(st.host.r, JSON.stringify(m));
       return;
     }
     m.f = 0;
     const s = JSON.stringify(m);
     for (const p of st.peers) {
       if (!p.ready || (m.to != null && m.to !== p.id)) continue;
-      const ch = unrel ? p.u : p.r;
-      if (unrel && ch && ch.bufferedAmount > 32768) continue;
-      tx(ch, s);
+      if (unrel && st.ws.bufferedAmount > 32768) continue;
+      tx(p.r, s);
     }
   }
   function leave() {
     if (st.role === 'host') {
       for (const p of st.peers) tx(p.r, '{"t":"_bye"}');
-      api({op: 'close', code: st.code, key: st.key}, true).catch(() => {});
     }
     reset();
   }
@@ -314,8 +292,6 @@ const Net = (() => {
     get isHost() {
       return st.role === 'host';
     },
-    setPoll(ms) {
-      st.pollMs = ms;
-    },
+    setPoll() {},
   };
 })();

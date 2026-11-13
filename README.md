@@ -3,13 +3,13 @@
 Two games in one page:
 
 - **Run**: a first-person parkour runner. Swipe on a phone, WASD and a locked mouse on desktop.
-- **Arena**: a peer-to-peer shooter for 2 to 8 players. One assault rifle, one map with wall runs, first to the kill
+- **Arena**: an online shooter for 2 to 8 players. One assault rifle, one map with wall runs, first to the kill
   target. You join a friend with a six-letter code.
 
 Live: https://flow-state-beryl.vercel.app
 
-Plain HTML/JS on top of three.js (loaded from a CDN). No build step: `src/` is deployed as-is, plus one serverless
-function (`api/lobby.js`) for the Arena handshake.
+Plain HTML/JS on top of three.js (loaded from a CDN). No build step: `src/` is deployed as-is. The Arena also needs
+the small WebSocket relay in `server/` (see Deploy).
 
 ## Arena
 
@@ -17,12 +17,10 @@ function (`api/lobby.js`) for the Arena handshake.
 to win, respawn time, health, time limit) and starts; anyone who joins later drops into the running match. If the
 host leaves, the match ends for everyone.
 
-**How the networking works.** Players connect straight to the host over WebRTC data channels (a star: the host relays).
-The only server involved is `api/lobby.js`, which carries one offer and one answer per joiner. It keeps them in a
-private **Vercel Blob** store (`flow-state-lobbies`, linked to the project as `BLOB_READ_WRITE_TOKEN`), one small JSON
-document per lobby at `lobbies/<CODE>.json`, written with ETag conditions so simultaneous joins cannot clobber each
-other. Codes expire after six hours. No game traffic touches a server. There is no TURN relay, so two players behind
-strict (symmetric) NATs may fail to connect; STUN covers ordinary home and mobile networks.
+**How the networking works.** Every player holds one WebSocket to the relay (`server/relay.js`). The host's browser
+still runs the match, and the relay forwards messages between the host and its joiners without reading them (a star).
+The relay creates the six-letter codes and frees a code when its host disconnects. There is no peer-to-peer link, so
+strict NATs and firewalls are not a problem; a joiner is only as far from the host as the relay is.
 
 Each client owns its own movement and tests its own shots; the target owns its health and announces its own death;
 the host keeps the score and calls the winner.
@@ -122,24 +120,26 @@ src/
   ui.js           hover/press feedback, crosshair, toasts, cursor effect
   game.js         renderer, camera, game loop, screens
   arena-core.js   Arena map, movement (run, jump, wall run, wall jump) and ray tests (no DOM)
-  net.js          lobby client + WebRTC star (reliable and unreliable channel per player)
+  net.js          lobby client + WebSocket link to the relay
   rifle.js        the AR-9 model, its toon + outline shader, muzzle flash
   arena.js        Arena match flow, soldiers, cameras, HUD, touch controls, kill replay
   arena.css       mode picker, Arena menu, lobby, HUD
-api/lobby.js      lobby signaling on Vercel Blob (in-memory when there is no token)
+config.js         window.FLOW_RELAY: where the relay lives
+server/relay.js   the Arena WebSocket relay (Node + ws), deployed separately from the static site
+tests/net.test.js     net.js against the real relay: host, joiners, leaving, a full lobby
 tests/gyro.test.js    numeric tests for the gesture engine and calibration
 tests/stance.test.js  the centre following a drifting stance, sloppy returns, gyro / orientation / accelerometer fusion
 tests/look.test.js    the view holding still through moves, 1:1 looks, running where you look, corners taken by looking
 tests/assist.test.js  aim assist through corners
 tests/arena.test.js   Arena movement, wall runs, the map's routes, hit geometry
-scripts/dev-server.js  static server for src/ that also mounts api/lobby.js (so lobbies work locally)
+scripts/dev-server.js  static server for src/ that also runs the relay at /relay (so lobbies work locally)
 scripts/dev-server.py  static only
 ```
 
 ## Develop
 
 ```
-npm run dev     # http://localhost:5173, no caching, lobby API included (in-memory)
+npm run dev     # http://localhost:5173, no caching, relay included
 npm test        # gesture engine, stance + sensor fusion, VR look + corners, calibration, aim assist, arena
 ```
 
@@ -150,5 +150,9 @@ on its side, with arbitrary world headings and oblique wrist axes) and checks ca
 
 ## Deploy
 
-Pushed to `main` -> Vercel production. `vercel.json` points the output directory at `src/`; there is no build. Vercel
-installs `@vercel/blob` for `api/lobby.js`, which needs the `BLOB_READ_WRITE_TOKEN` the linked Blob store provides.
+The static site: pushed to `main` -> Vercel production. `vercel.json` points the output directory at `src/`; there is no build.
+
+The relay needs a host that keeps WebSockets open (Vercel functions cannot): Fly.io, Render, Railway or any VPS.
+`node server/relay.js` listens on `PORT` (default 8080) and has one dependency (`ws`; `npm --prefix server install`).
+Then set `window.FLOW_RELAY` in `src/config.js` to its address, for example `wss://flow-state-relay.fly.dev/relay`,
+and push. Until it is set, the site looks for `/relay` on its own origin, which only the dev server serves.
