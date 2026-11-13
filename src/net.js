@@ -4,7 +4,19 @@
 // (/api/lobby, backed by Vercel Blob) is only used for the handshake; once the data channels are open nothing
 // goes through a server. Each link has a reliable channel (events) and an unreliable one (positions, shots).
 const Net = (() => {
-  const ICE = [{urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']}, {urls: 'stun:stun.cloudflare.com:3478'}];
+  const STUN = [{urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']}, {urls: 'stun:stun.cloudflare.com:3478'}];
+  // STUN + TURN from the lobby API (TURN relays the link when the two networks cannot reach each other directly).
+  // Fetched once per page; falls back to STUN only if the API does not answer.
+  let iceP = null;
+  const ice = () =>
+    (iceP =
+      iceP ||
+      api({op: 'ice'})
+        .then((r) => (r && Array.isArray(r.iceServers) && r.iceServers.length ? r.iceServers : STUN))
+        .catch(() => {
+          iceP = null;
+          return STUN;
+        }));
   const MAXP = 8;
   const st = {role: null, code: '', key: '', id: -1, name: '', roster: [], peers: [], host: null, nextId: 1, seen: {}, pollMs: 2000, t0: 0, gen: 0};
   const on = {msg() {}, roster() {}, joined() {}, closed() {}};
@@ -30,12 +42,28 @@ const Net = (() => {
   const gathered = (pc) =>
     new Promise((res) => {
       if (pc.iceGatheringState === 'complete') return res();
-      const t = setTimeout(res, 2500);
+      // Don't wait for every server: a TURN relay candidate is enough to connect from anywhere; without one, give
+      // STUN 2.5 s; never wait longer than 5 s.
+      let done = false, soon = null;
+      const fin = () => {
+        if (done) return;
+        done = true;
+        clearTimeout(t);
+        clearTimeout(t2);
+        clearTimeout(soon);
+        res();
+      };
+      const t = setTimeout(fin, 5000);
+      let srflx = false;
+      const t2 = setTimeout(() => srflx && fin(), 2500);
+      pc.addEventListener('icecandidate', (e) => {
+        const c = e.candidate && e.candidate.candidate;
+        if (!c) return;
+        if (/ typ relay/.test(c)) soon = soon || setTimeout(fin, 300);
+        else if (/ typ srflx/.test(c)) srflx = true;
+      });
       pc.addEventListener('icegatheringstatechange', () => {
-        if (pc.iceGatheringState === 'complete') {
-          clearTimeout(t);
-          res();
-        }
+        if (pc.iceGatheringState === 'complete') fin();
       });
     });
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -73,6 +101,7 @@ const Net = (() => {
     reset();
     const gen = st.gen;
     const r = await api({op: 'create'});
+    ice(); // warm up, so the first joiner is not kept waiting for it
     if (gen !== st.gen) return null;
     Object.assign(st, {role: 'host', code: r.code, key: r.key, id: 0, name: cleanName(name), t0: nowS()});
     st.roster = [{id: 0, name: st.name}];
@@ -109,7 +138,7 @@ const Net = (() => {
   }
   async function accept(peer, sdp, gen) {
     if (st.peers.length >= MAXP - 1) return;
-    const pc = new RTCPeerConnection({iceServers: ICE});
+    const pc = new RTCPeerConnection({iceServers: await ice()});
     const p = {pc, id: st.nextId++, name: '', r: null, u: null, ready: false, last: nowS(), born: nowS()};
     st.peers.push(p);
     pc.ondatachannel = (e) => {
@@ -189,7 +218,7 @@ const Net = (() => {
     if (!/^[A-Z]{6}$/.test(code)) throw new Error('A lobby code is six letters');
     if (typeof RTCPeerConnection === 'undefined') throw new Error('This browser cannot make peer-to-peer connections');
     const peer = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => (b % 36).toString(36)).join('') + 'x';
-    const pc = new RTCPeerConnection({iceServers: ICE});
+    const pc = new RTCPeerConnection({iceServers: await ice()});
     const h = {pc, r: pc.createDataChannel('r'), u: pc.createDataChannel('u', {ordered: false, maxRetransmits: 0}), last: nowS()};
     const fail = (msg) => {
       try {
@@ -231,7 +260,7 @@ const Net = (() => {
       });
     });
     if (dead()) fail('Cancelled');
-    if (!opened) fail('Could not connect to the host directly. One of the two networks blocks peer-to-peer traffic.');
+    if (!opened) fail('Could not connect to the host. Try again, or try from another network (e.g. Wi-Fi instead of mobile data).');
     Object.assign(st, {role: 'client', code, name: cleanName(name), host: h});
     const welcomed = new Promise((res) => {
       const t = setTimeout(() => res(false), 8000);

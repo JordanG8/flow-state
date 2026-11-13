@@ -103,9 +103,47 @@ async function mutate(code, fn) {
   return fail(503, 'Lobby is busy, try again');
 }
 
+// ---- ICE servers --------------------------------------------------------------------------------------------
+// STUN alone cannot connect two players when either is behind a carrier-grade or symmetric NAT (most mobile data),
+// so the clients also get TURN relays. Short-lived credentials come from Cloudflare Realtime TURN
+// (TURN_KEY_ID + TURN_KEY_API_TOKEN) or Metered (METERED_DOMAIN + METERED_API_KEY) when configured; otherwise the
+// public Open Relay servers are the best-effort fallback.
+const STUN = [{urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']}, {urls: 'stun:stun.cloudflare.com:3478'}];
+const OPEN_RELAY = {
+  urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'],
+  username: 'openrelayproject',
+  credential: 'openrelayproject',
+};
+async function iceServers() {
+  const E = process.env;
+  try {
+    if (E.TURN_KEY_ID && E.TURN_KEY_API_TOKEN) {
+      const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + E.TURN_KEY_ID + '/credentials/generate-ice-servers', {
+        method: 'POST',
+        headers: {Authorization: 'Bearer ' + E.TURN_KEY_API_TOKEN, 'Content-Type': 'application/json'},
+        body: JSON.stringify({ttl: 6 * 3600}),
+        signal: AbortSignal.timeout(4000),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const list = Array.isArray(j.iceServers) ? j.iceServers : [j.iceServers];
+        return STUN.concat(list.filter(Boolean));
+      }
+    }
+    if (E.METERED_DOMAIN && E.METERED_API_KEY) {
+      const r = await fetch('https://' + E.METERED_DOMAIN + '/api/v1/turn/credentials?apiKey=' + encodeURIComponent(E.METERED_API_KEY), {signal: AbortSignal.timeout(4000)});
+      if (r.ok) return STUN.concat(await r.json());
+    }
+  } catch (e) {
+    console.error('ice', e && e.message);
+  }
+  return STUN.concat([OPEN_RELAY]);
+}
+
 async function handle(b) {
   const st = getStore();
   const op = b && b.op;
+  if (op === 'ice') return ok({iceServers: await iceServers()});
   if (op === 'create') {
     if (Math.random() < 0.1) st.sweep().catch(() => {});
     for (let i = 0; i < 8; i++) {
