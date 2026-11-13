@@ -89,9 +89,10 @@ async function mutate(code, fn) {
   for (let i = 0; i < 5; i++) {
     const r = await st.read(code);
     if (!live(r)) return fail(404, 'No lobby with that code');
+    // Drop expired offers/answers first, so stale ones never count against MAX_PENDING.
+    prune(r.doc);
     const out = fn(r.doc);
     if (out) return out;
-    prune(r.doc);
     try {
       await st.write(code, r.doc, r.etag);
       return ok({ok: true});
