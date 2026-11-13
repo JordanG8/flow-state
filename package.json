@@ -2,10 +2,12 @@
   "name": "flow-state",
   "version": "1.0.0",
   "private": true,
-  "description": "A parkour runner and an online arena shooter, in the browser",
+  "description": "A parkour runner and a peer-to-peer arena shooter, in the browser",
   "scripts": {
-    "dev": "npm --prefix server install --silent && node scripts/dev-server.js 5173",
-    "relay": "npm --prefix server install --silent && node server/relay.js",
-    "test": "node tests/gyro.test.js && node tests/stance.test.js && node tests/look.test.js && node tests/assist.test.js && node tests/arena.test.js && npm --prefix server install --silent && node tests/net.test.js"
+    "dev": "node scripts/dev-server.js 5173",
+    "test": "node tests/gyro.test.js && node tests/stance.test.js && node tests/look.test.js && node tests/assist.test.js && node tests/arena.test.js"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.9.0"
   }
 }
