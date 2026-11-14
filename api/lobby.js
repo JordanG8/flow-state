@@ -107,7 +107,7 @@ async function mutate(code, fn) {
 // STUN alone cannot connect two players when either is behind a carrier-grade or symmetric NAT (most mobile data),
 // so the clients also get TURN relays. Short-lived credentials come from Cloudflare Realtime TURN
 // (TURN_KEY_ID + TURN_KEY_API_TOKEN) or Metered (METERED_DOMAIN + METERED_API_KEY) when configured; otherwise the
-// public Open Relay servers are the best-effort fallback.
+// public Open Relay servers are the best-effort fallback. TURN_SECRET + TURN_HOST (our own coturn) win over both.
 const STUN = [{urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']}, {urls: 'stun:stun.cloudflare.com:3478'}];
 const OPEN_RELAY = {
   urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp', 'turns:openrelay.metered.ca:443?transport=tcp'],
@@ -116,6 +116,13 @@ const OPEN_RELAY = {
 };
 async function iceServers() {
   const E = process.env;
+  // Our own coturn (use-auth-secret): username "<expiry>:fs", password = base64(HMAC-SHA1(secret, username)).
+  if (E.TURN_SECRET && E.TURN_HOST) {
+    const username = Math.floor(Date.now() / 1000) + 6 * 3600 + ':fs';
+    const credential = crypto.createHmac('sha1', E.TURN_SECRET).update(username).digest('base64');
+    const h = E.TURN_HOST;
+    return STUN.concat([{urls: ['turn:' + h + ':3478?transport=udp', 'turn:' + h + ':3478?transport=tcp'], username, credential}]);
+  }
   try {
     if (E.TURN_KEY_ID && E.TURN_KEY_API_TOKEN) {
       const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + E.TURN_KEY_ID + '/credentials/generate-ice-servers', {
