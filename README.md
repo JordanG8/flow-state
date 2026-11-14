@@ -3,7 +3,7 @@
 Two games in one page:
 
 - **Run**: a first-person parkour runner. Swipe on a phone, WASD and a locked mouse on desktop.
-- **Arena**: a peer-to-peer shooter for 2 to 8 players. One assault rifle, one map with wall runs, first to the kill
+- **Arena**: an online shooter for 2 to 8 players. One assault rifle, one map with wall runs, first to the kill
   target. You join a friend with a six-letter code.
 
 Live: https://flow-state-beryl.vercel.app
@@ -17,12 +17,17 @@ function (`api/lobby.js`) for the Arena handshake.
 to win, respawn time, health, time limit) and starts; anyone who joins later drops into the running match. If the
 host leaves, the match ends for everyone.
 
-**How the networking works.** Players connect straight to the host over WebRTC data channels (a star: the host relays).
-The only server involved is `api/lobby.js`, which carries one offer and one answer per joiner. It keeps them in a
-private **Vercel Blob** store (`flow-state-lobbies`, linked to the project as `BLOB_READ_WRITE_TOKEN`), one small JSON
-document per lobby at `lobbies/<CODE>.json`, written with ETag conditions so simultaneous joins cannot clobber each
-other. Codes expire after six hours. No game traffic touches a server. There is no TURN relay, so two players behind
-strict (symmetric) NATs may fail to connect; STUN covers ordinary home and mobile networks.
+**How the networking works.** The host's browser runs the match; everyone else connects to the host (a star). Two
+transports, tried in order:
+
+1. **Relay (default).** Every player holds one WebSocket to `server/relay.js`, which runs on the VPS at
+   `wss://srv859654.hstgr.cloud/relay` (Docker project `flow-state-relay`, behind Traefik with a Let's Encrypt
+   certificate). It creates the six-letter codes and forwards messages between the host and its joiners without
+   reading them. Joining takes about a second and works on any network.
+2. **Peer-to-peer (fallback, or `?relay=off`).** WebRTC data channels straight to the host. `api/lobby.js` carries
+   the offer/answer through a private Vercel Blob store (`BLOB_READ_WRITE_TOKEN`) and hands out ICE servers: STUN
+   plus TURN (coturn on the same VPS when `TURN_SECRET` and `TURN_HOST` are set, else Cloudflare / Metered keys,
+   else the public Open Relay servers).
 
 Each client owns its own movement and tests its own shots; the target owns its health and announces its own death;
 the host keeps the score and calls the winner.
@@ -126,13 +131,15 @@ src/
   rifle.js        the AR-9 model, its toon + outline shader, muzzle flash
   arena.js        Arena match flow, soldiers, cameras, HUD, touch controls, kill replay
   arena.css       mode picker, Arena menu, lobby, HUD
-api/lobby.js      lobby signaling on Vercel Blob (in-memory when there is no token)
+api/lobby.js      peer-to-peer fallback: signaling on Vercel Blob (in-memory when there is no token), ICE servers
+server/relay.js   the Arena WebSocket relay (Node + ws), deployed to the VPS
+tests/net.test.js     net.js against the real relay, and both fallbacks
 tests/gyro.test.js    numeric tests for the gesture engine and calibration
 tests/stance.test.js  the centre following a drifting stance, sloppy returns, gyro / orientation / accelerometer fusion
 tests/look.test.js    the view holding still through moves, 1:1 looks, running where you look, corners taken by looking
 tests/assist.test.js  aim assist through corners
 tests/arena.test.js   Arena movement, wall runs, the map's routes, hit geometry
-scripts/dev-server.js  static server for src/ that also mounts api/lobby.js (so lobbies work locally)
+scripts/dev-server.js  static server for src/ that also mounts api/lobby.js and runs the relay at /relay
 scripts/dev-server.py  static only
 ```
 
@@ -152,3 +159,6 @@ on its side, with arbitrary world headings and oblique wrist axes) and checks ca
 
 Pushed to `main` -> Vercel production. `vercel.json` points the output directory at `src/`; there is no build. Vercel
 installs `@vercel/blob` for `api/lobby.js`, which needs the `BLOB_READ_WRITE_TOKEN` the linked Blob store provides.
+
+The relay is deployed separately, as a Docker Compose project on the VPS with `server/relay.js` inlined as a compose
+`config`; redeploy it after changing that file. Locally, `npm run dev` runs it at `/relay` on the dev server.
