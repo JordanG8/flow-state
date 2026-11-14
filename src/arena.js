@@ -1023,7 +1023,74 @@ const Arena = (() => {
       e.textContent = v;
     }
   };
+  // ---- minimap --------------------------------------------------------------------------------------------
+  // North-up plan of Switchback. You are the arrow; other players appear only for a moment after they fire.
+  const MM = {x0: -42, x1: 42, z0: -32, z1: 32, w: 132, h: 100, bg: null, last: 0, SEEN: 2.5};
+  const mmX = (x) => ((x - MM.x0) / (MM.x1 - MM.x0)) * MM.w;
+  const mmY = (z) => ((z - MM.z0) / (MM.z1 - MM.z0)) * MM.h;
+  function mmInit() {
+    const cv = E.mm;
+    if (!cv || MM.bg) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = MM.w * dpr;
+    cv.height = MM.h * dpr;
+    const bg = document.createElement('canvas');
+    bg.width = cv.width;
+    bg.height = cv.height;
+    const g = bg.getContext('2d');
+    g.scale(dpr, dpr);
+    const rect = (b, fill) => {
+      g.fillStyle = fill;
+      g.fillRect(mmX(b.x0), mmY(b.z0), Math.max(1, mmX(b.x1) - mmX(b.x0)), Math.max(1, mmY(b.z1) - mmY(b.z0)));
+    };
+    const solid = ACORE.MAP.solid;
+    for (const b of solid) if (b.y1 <= 0.01 && b.y0 < -0.5) rect(b, 'rgba(236,235,230,0.9)'); // floors; the chasm stays clear
+    for (const b of solid) if (b.y1 > 0.01 && b.y1 - b.y0 <= 1.2 && b.y0 > 3) rect(b, 'rgba(120,120,115,0.85)'); // decks, catwalk
+    for (const b of solid) if (b.y1 > 0.01 && !(b.y1 - b.y0 <= 1.2 && b.y0 > 3)) rect(b, b.wr ? '#e0322b' : '#1a1a1a'); // walls, cover
+    MM.bg = bg;
+    MM.dpr = dpr;
+  }
+  function mmTick(now) {
+    const cv = E.mm;
+    if (!cv || !G.P) return;
+    if (now - MM.last < 0.08) return; // ~12 fps is plenty for a map
+    MM.last = now;
+    mmInit();
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.drawImage(MM.bg, 0, 0);
+    g.setTransform(MM.dpr, 0, 0, MM.dpr, 0, 0);
+    const fired = {};
+    for (const sh of G.shots) if (now - sh.t < MM.SEEN) fired[sh.id] = 1;
+    for (const pl of G.players.values()) {
+      if (pl === G.me || !pl.cur || pl.cur.fl & F_DEAD || !fired[pl.id]) continue;
+      g.fillStyle = colCss(pl.col);
+      g.strokeStyle = '#1a1a1a';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.arc(mmX(pl.cur.x), mmY(pl.cur.z), 3.5, 0, Math.PI * 2);
+      g.fill();
+      g.stroke();
+    }
+    if (G.alive) {
+      // forward is (-sin yaw, -cos yaw) in x/z, and z grows downwards on the map
+      const x = mmX(G.P.x), y = mmY(G.P.z), a = G.look.yaw;
+      const fx = -Math.sin(a), fz = -Math.cos(a);
+      g.fillStyle = G.me ? colCss(G.me.col) : '#fff';
+      g.strokeStyle = '#1a1a1a';
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.moveTo(x + fx * 6, y + fz * 6);
+      g.lineTo(x - fx * 3.5 - fz * 4, y - fz * 3.5 + fx * 4);
+      g.lineTo(x - fx * 3.5 + fz * 4, y - fz * 3.5 - fx * 4);
+      g.closePath();
+      g.fill();
+      g.stroke();
+    }
+  }
   function hudTick(now) {
+    mmTick(now);
     setTxt('k', E.k, String(G.me ? G.me.kills : 0).padStart(2, '0'));
     setTxt('hp', E.hpn, Math.max(0, Math.ceil(G.hp)));
     const hk = clamp(G.hp / G.set.hp, 0, 1);
@@ -1199,6 +1266,31 @@ const Arena = (() => {
     }
     busy(false);
   }
+  // Invite links: <site>?join=ABCDEF opens the Arena and joins that lobby (see boot() in game.js).
+  const inviteUrl = () => location.origin + location.pathname + '?join=' + Net.st.code;
+  function shareLink(b) {
+    const url = inviteUrl();
+    const label = b.textContent;
+    const done = (t) => {
+      b.textContent = t;
+      setTimeout(() => (b.textContent = label), 1600);
+    };
+    const copy = () => {
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(() => done('Link copied'), () => prompt('Copy this link', url));
+      else prompt('Copy this link', url);
+    };
+    // the phone's share sheet (WhatsApp, Messages...) where there is one, otherwise the clipboard
+    if (navigator.share && matchMedia('(pointer: coarse)').matches)
+      navigator.share({title: 'Flow State Arena', text: 'Join my Arena lobby (' + Net.st.code + ')', url}).catch((e) => {
+        if (e && e.name !== 'AbortError') copy();
+      });
+    else copy();
+  }
+  function joinLink(code) {
+    openMenu();
+    $id('am-code').value = code;
+    doJoin();
+  }
   function drawLobby() {
     if (!E.code) return;
     const host = Net.isHost;
@@ -1281,7 +1373,7 @@ const Arena = (() => {
     for (const [k, id] of Object.entries({
       hud: 'ahud', k: 'ah-k', kt: 'ah-kt', time: 'ah-time', feed: 'ah-feed', xh: 'ah-xh', hp: 'ah-hp', hpn: 'ah-hpn', hpf: 'ah-hpf', ammo: 'ah-ammo',
       am: 'ah-am', bigs: 'ah-bigs', death: 'ah-death', dtag: 'ah-dtag', dby: 'ah-dby', dcd: 'ah-dcd', dbf: 'ah-dbf', board: 'ah-board', touch: 'ah-touch',
-      status: 'am-status', code: 'lb-code',
+      status: 'am-status', code: 'lb-code', mm: 'ah-mm',
     }))
       E[k] = $id(id);
     document.addEventListener('click', (e) => {
@@ -1301,7 +1393,8 @@ const Arena = (() => {
           setTimeout(() => (b.textContent = 'Copy'), 1400);
         };
         if (navigator.clipboard) navigator.clipboard.writeText(Net.st.code).then(done, () => {});
-      } else if (a === 'start') {
+      } else if (a === 'share') shareLink(b);
+      else if (a === 'start') {
         In.lock();
         hostStart();
       } else if (a === 'resume') {
@@ -1439,7 +1532,7 @@ const Arena = (() => {
   }
 
   return {
-    G, PCOL, openMenu,
+    G, PCOL, openMenu, joinLink,
     // called by the game loop every frame; true when the Arena drew the frame
     tick(raw, now) {
       if (!G.ready || (game.state !== 'lobby' && game.state !== 'arena')) return false;
