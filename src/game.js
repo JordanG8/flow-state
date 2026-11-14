@@ -1197,7 +1197,10 @@ async function boot() {
   setProg(1, 'Ready');
   await tick(400);
   const b = $('#ld-go');
-  b.textContent = 'Tap to enter';
+  // an invite link (?join=ABCDEF) goes straight to that Arena lobby
+  const inv = (new URLSearchParams(location.search).get('join') || '').toUpperCase();
+  const joinCode = /^[A-Z]{6}$/.test(inv) ? inv : '';
+  b.textContent = joinCode ? 'Tap to join lobby ' + joinCode : 'Tap to enter';
   b.classList.add('rdy');
   b.disabled = false;
   b.onclick = async () => {
@@ -1206,7 +1209,13 @@ async function boot() {
     A.init();
     A.ui();
     await tick(60);
-    toMenu(true);
+    if (joinCode) {
+      history.replaceState(null, '', location.pathname); // a reload should not rejoin an old lobby
+      wipe(() => {
+        toMenu(false);
+        Arena.joinLink(joinCode);
+      });
+    } else toMenu(true);
   };
 }
 function toMenu(wiped) {

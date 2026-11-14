@@ -1053,3 +1053,26 @@ body[data-view='third'] #ah-view i::after {
     flex: none;
   }
 }
+
+/* invite link button under the lobby code */
+.lb-share {
+  width: 100%;
+  margin: 8px 0 4px;
+}
+/* minimap, under the score */
+#ah-mm {
+  position: absolute;
+  top: calc(var(--pt) + 58px);
+  left: var(--pl);
+  width: 132px;
+  height: 100px;
+  background: rgba(26, 26, 26, 0.18);
+  border: 2px solid var(--ink);
+}
+@media (max-height: 430px) {
+  #ah-mm {
+    top: calc(var(--pt) + 48px);
+    width: 106px;
+    height: 80px;
+  }
+}
