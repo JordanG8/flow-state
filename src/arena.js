@@ -364,7 +364,7 @@ const Arena = (() => {
     for (const id of G.players.keys()) sp[id] = idx[n++ % idx.length];
     const m = {t: 'start', s: G.set, sp, el: 0};
     Net.send(m);
-    Net.setPoll(6000);
+    Net.setPoll(4000);
     startMatch(m);
   }
   function startMatch(m) {
@@ -1259,7 +1259,7 @@ const Arena = (() => {
     busy(true);
     status('Connecting to ' + code);
     try {
-      await Net.join(code, myName());
+      await Net.join(code, myName(), (t) => status(t + ' (' + code + ')'));
       if (game.state === 'mp') enterLobby(); // the host may already have dropped us into a running match
     } catch (e) {
       if (e.message !== 'Cancelled') status(e.message, true);

@@ -18,7 +18,7 @@ const Net = (() => {
           return STUN;
         }));
   const MAXP = 8;
-  const st = {role: null, code: '', key: '', id: -1, name: '', roster: [], peers: [], host: null, nextId: 1, seen: {}, pollMs: 2000, t0: 0, gen: 0};
+  const st = {role: null, code: '', key: '', id: -1, name: '', roster: [], peers: [], host: null, nextId: 1, seen: {}, pollMs: 2000, t0: 0, gen: 0, wake: null};
   const on = {msg() {}, roster() {}, joined() {}, closed() {}};
   let timers = [];
   const nowS = () => performance.now() / 1e3;
@@ -43,7 +43,7 @@ const Net = (() => {
     new Promise((res) => {
       if (pc.iceGatheringState === 'complete') return res();
       // Don't wait for every server: a TURN relay candidate is enough to connect from anywhere; without one, give
-      // STUN 2.5 s; never wait longer than 5 s.
+      // STUN 1.5 s; never wait longer than 4 s.
       let done = false, soon = null;
       const fin = () => {
         if (done) return;
@@ -53,9 +53,9 @@ const Net = (() => {
         clearTimeout(soon);
         res();
       };
-      const t = setTimeout(fin, 5000);
+      const t = setTimeout(fin, 4000);
       let srflx = false;
-      const t2 = setTimeout(() => srflx && fin(), 2500);
+      const t2 = setTimeout(() => srflx && fin(), 1500);
       pc.addEventListener('icecandidate', (e) => {
         const c = e.candidate && e.candidate.candidate;
         if (!c) return;
@@ -132,8 +132,15 @@ const Net = (() => {
       } catch (e) {
         if (/No lobby/.test(e.message)) return; // expired: people already connected keep playing
       }
-      // an idle lobby polls more slowly
-      await wait(Math.max(st.pollMs, nowS() - st.t0 > 600 ? 5000 : 0));
+      // an idle lobby polls more slowly; returning to the page (e.g. from the share sheet) checks at once
+      await new Promise((r) => {
+        const t = setTimeout(r, Math.max(st.pollMs, nowS() - st.t0 > 600 ? 4000 : 0));
+        st.wake = () => {
+          clearTimeout(t);
+          r();
+        };
+      });
+      st.wake = null;
     }
   }
   async function accept(peer, sdp, gen) {
@@ -210,7 +217,8 @@ const Net = (() => {
   }
 
   // ---- join -----------------------------------------------------------------------------------------------
-  async function join(code, name) {
+  async function join(code, name, say) {
+    say = say || (() => {});
     reset();
     const gen = st.gen;
     const dead = () => gen !== st.gen;
@@ -233,9 +241,12 @@ const Net = (() => {
     } catch (e) {
       fail(e.message);
     }
+    say('Waiting for the host to answer');
     let ans = null;
-    for (let i = 0; i < 22 && !ans; i++) {
-      await wait(i < 4 ? 900 : 1500);
+    const t0 = nowS();
+    for (let i = 0; !ans && nowS() - t0 < 75; i++) {
+      await wait(i < 6 ? 800 : 1500);
+      if (nowS() - t0 > 12) say('Still waiting for the host. They need the game open on their screen');
       if (dead()) fail('Cancelled');
       try {
         ans = (await api({op: 'wait', code, peer})).sdp;
@@ -243,7 +254,8 @@ const Net = (() => {
         fail(e.message);
       }
     }
-    if (!ans) fail('The host did not answer. The lobby may be full, or its host has gone.');
+    if (!ans) fail('The host did not answer. They need the game open on their screen (not in another app).');
+    say('Connecting');
     await pc.setRemoteDescription({type: 'answer', sdp: ans});
     const opened = await new Promise((res) => {
       if (h.r.readyState === 'open') return res(true);
@@ -337,6 +349,10 @@ const Net = (() => {
     reset();
   }
   addEventListener('pagehide', leave);
+  // A phone suspends a backgrounded page, so a host who went to send the invite cannot answer until they come back.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && st.wake) st.wake();
+  });
 
   return {
     st, on, host, join, send, leave, MAXP, cleanName,
